@@ -5,8 +5,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from .models import EquipmentStatusHistory, IssueComment, LectureHall, MaintenanceTicket, UserProfile
-from .serializers import CommentSerializer, IssueCreateSerializer, IssueSerializer, RegisterSerializer, STATUS_REVERSE_MAP, UserProfileSerializer, split_category_description
+from .models import EquipmentStatusHistory, IssueComment, LectureHall, MaintenanceTicket, UserNotification, UserProfile
+from .serializers import CommentSerializer, IssueCreateSerializer, IssueSerializer, NotificationSerializer, RegisterSerializer, STATUS_REVERSE_MAP, UserProfileSerializer, split_category_description
 
 
 def get_session_user(request):
@@ -118,6 +118,47 @@ def meta(request):
 	return Response({'facilities': facilities, 'categories': categories})
 
 
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def notifications(request):
+	user = get_session_user(request)
+	if not user:
+		return Response({'detail': 'Chưa đăng nhập.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+	items = UserNotification.objects.filter(user=user).order_by('-created_at')[:200]
+	return Response(NotificationSerializer(items, many=True).data)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def mark_notification_read(request, pk: int):
+	user = get_session_user(request)
+	if not user:
+		return Response({'detail': 'Chưa đăng nhập.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+	try:
+		notification = UserNotification.objects.get(id=pk, user=user)
+	except UserNotification.DoesNotExist:
+		return Response({'detail': 'Không tìm thấy thông báo.'}, status=status.HTTP_404_NOT_FOUND)
+
+	if not notification.is_read:
+		notification.is_read = True
+		notification.save(update_fields=['is_read'])
+
+	return Response(NotificationSerializer(notification).data)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def mark_all_notifications_read(request):
+	user = get_session_user(request)
+	if not user:
+		return Response({'detail': 'Chưa đăng nhập.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+	UserNotification.objects.filter(user=user, is_read=False).update(is_read=True)
+	return Response({'detail': 'Đã đánh dấu tất cả đã đọc.'})
+
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def update_issue_status(request, pk: int):
@@ -162,6 +203,19 @@ def update_issue_status(request, pk: int):
 		note=stored_note,
 		changed_at=timezone.now(),
 	)
+
+	if ticket.reporter_id:
+		status_label = status_map[status_input]
+		note_text = note or history_map[status_input]
+		message_lines = [f"Trạng thái mới: {status_label}"]
+		if note_text:
+			message_lines.append(f"Ghi chú: {note_text}")
+		UserNotification.objects.create(
+			user=ticket.reporter,
+			ticket=ticket,
+			title=f"Cập nhật sự cố #{ticket.id}",
+			message="\n".join(message_lines),
+		)
 
 	return Response(IssueSerializer(ticket).data)
 

@@ -8,6 +8,7 @@ import Login from "./components/Login";
 import Register from "./components/Register";
 import Profile from "./components/Profile";
 import AdminIssues from "./components/AdminIssues";
+import Inbox from "./components/Inbox";
 import NotFound from "./components/NotFound";
 
 export const router = createBrowserRouter([
@@ -31,6 +32,7 @@ export const router = createBrowserRouter([
       { path: "report", Component: ReportIssue },
       { path: "issues", Component: IssueList },
       { path: "issues/:id", Component: IssueDetail },
+      { path: "inbox", Component: Inbox },
       { path: "admin/issues", Component: AdminIssues },
       { path: "profile", Component: Profile },
       { path: "*", Component: NotFound },

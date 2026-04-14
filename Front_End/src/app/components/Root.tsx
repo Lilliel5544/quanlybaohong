@@ -1,14 +1,15 @@
 import { Outlet, Link, Navigate, useLocation } from 'react-router';
-import { Home, FileText, List, Menu, User } from 'lucide-react';
+import { Home, FileText, List, Mail, Menu, User } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from './ui/button';
 import { Sheet, SheetContent, SheetTrigger } from './ui/sheet';
-import { getStoredUser } from '../data/api';
+import { getNotifications, getStoredUser } from '../data/api';
 
 export default function Root() {
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState(getStoredUser());
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     const handleAuthChange = () => {
@@ -19,6 +20,27 @@ export default function Root() {
     return () => window.removeEventListener('auth-change', handleAuthChange);
   }, []);
 
+  useEffect(() => {
+    const loadNotifications = async () => {
+      if (!currentUser) return;
+      try {
+        const items = await getNotifications();
+        const count = items.filter((item) => !item.isRead).length;
+        setUnreadCount(count);
+      } catch {
+        setUnreadCount(0);
+      }
+    };
+
+    const handleNotificationsChange = () => {
+      loadNotifications();
+    };
+
+    loadNotifications();
+    window.addEventListener('notifications-change', handleNotificationsChange);
+    return () => window.removeEventListener('notifications-change', handleNotificationsChange);
+  }, [currentUser]);
+
   if (!currentUser) {
     return <Navigate to="/login" replace />;
   }
@@ -27,6 +49,7 @@ export default function Root() {
     { name: 'Trang chủ', path: '/home', icon: Home },
     { name: 'Báo cáo sự cố', path: '/report', icon: FileText },
     { name: 'Danh sách sự cố', path: '/issues', icon: List },
+    { name: 'Hòm thư', path: '/inbox', icon: Mail },
   ];
 
   const adminNavigation = [
@@ -51,6 +74,11 @@ export default function Root() {
           >
             <Icon className="w-5 h-5" />
             <span>{item.name}</span>
+            {item.path === '/inbox' && unreadCount > 0 && (
+              <span className="ml-1 rounded-full bg-red-600 px-2 py-0.5 text-xs font-semibold text-white">
+                {unreadCount}
+              </span>
+            )}
           </Link>
         );
       })}

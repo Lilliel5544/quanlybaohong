@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from .views import IssueViewSet, csrf, issue_comments, login, logout, me, meta, register, update_issue_status
+from .views import IssueViewSet, csrf, issue_comments, login, logout, mark_all_notifications_read, mark_notification_read, me, meta, notifications, register, update_issue_status
 
 router = DefaultRouter()
 router.register('issues', IssueViewSet, basename='issues')
@@ -13,6 +13,9 @@ urlpatterns = [
     path('logout/', logout, name='logout'),
     path('me/', me, name='me'),
     path('meta/', meta, name='meta'),
+    path('notifications/', notifications, name='notifications'),
+    path('notifications/read-all/', mark_all_notifications_read, name='notifications-read-all'),
+    path('notifications/<int:pk>/read/', mark_notification_read, name='notifications-read'),
     path('issues/<int:pk>/status/', update_issue_status, name='issue-status'),
     path('issues/<int:pk>/comments/', issue_comments, name='issue-comments'),
     path('', include(router.urls)),

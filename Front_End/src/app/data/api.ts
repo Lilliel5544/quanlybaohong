@@ -34,6 +34,15 @@ export interface IssueComment {
   createdAt: string;
 }
 
+export interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  isRead: boolean;
+  createdAt: string;
+  ticketId?: number | null;
+}
+
 export interface User {
   id: string;
   username: string;
@@ -51,6 +60,10 @@ let csrfToken: string | null = null;
 
 const authEvent = () => {
   window.dispatchEvent(new Event('auth-change'));
+};
+
+const notificationsEvent = () => {
+  window.dispatchEvent(new Event('notifications-change'));
 };
 
 const mapRole = (role: string) => {
@@ -212,6 +225,22 @@ export const createIssueComment = async (id: string, comment: string): Promise<I
     method: 'POST',
     body: JSON.stringify({ comment }),
   });
+};
+
+export const getNotifications = async (): Promise<Notification[]> => {
+  return apiFetch('/notifications/');
+};
+
+export const markNotificationRead = async (id: string): Promise<Notification> => {
+  const data = await apiFetch(`/notifications/${id}/read/`, { method: 'POST' });
+  notificationsEvent();
+  return data;
+};
+
+export const markAllNotificationsRead = async (): Promise<{ detail: string }> => {
+  const data = await apiFetch('/notifications/read-all/', { method: 'POST' });
+  notificationsEvent();
+  return data;
 };
 
 export const getMeta = async (): Promise<{ facilities: string[]; categories: string[] }> => {

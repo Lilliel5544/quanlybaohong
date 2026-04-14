@@ -5,7 +5,7 @@ from typing import Optional
 from rest_framework import serializers
 from django.db.models import Max
 
-from .models import EquipmentStatusHistory, IssueComment, LectureHall, MaintenanceLog, MaintenanceTicket, UserProfile
+from .models import EquipmentStatusHistory, IssueComment, LectureHall, MaintenanceLog, MaintenanceTicket, UserNotification, UserProfile
 
 
 STATUS_MAP = {
@@ -220,6 +220,16 @@ class CommentSerializer(serializers.ModelSerializer):
     class Meta:
         model = IssueComment
         fields = ['id', 'comment', 'userName', 'userFullName', 'createdAt']
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    isRead = serializers.BooleanField(source='is_read')
+    createdAt = serializers.DateTimeField(source='created_at')
+    ticketId = serializers.IntegerField(source='ticket_id', allow_null=True)
+
+    class Meta:
+        model = UserNotification
+        fields = ['id', 'title', 'message', 'isRead', 'createdAt', 'ticketId']
 
 
 class RegisterSerializer(serializers.Serializer):
