@@ -73,7 +73,37 @@ def me(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def meta(request):
+	default_facilities = [
+		'Cơ sở Hà Nội',
+		'Cơ sở Hồ Chí Minh',
+		'Cơ sở Đà Nẵng',
+		'Cơ sở Huế',
+	]
+	default_categories = [
+		'Thiết bị điện tử',
+		'Bàn ghế',
+		'Điện - Đèn',
+		'Máy chiếu',
+		'Máy lạnh',
+		'Bảng đen/bảng trắng',
+		'Cửa sổ/Cửa ra vào',
+		'Vệ sinh',
+		'Khác',
+	]
+
+	def unique(items):
+		seen = set()
+		result = []
+		for item in items:
+			if not item or item in seen:
+				continue
+			seen.add(item)
+			result.append(item)
+		return result
+
 	facilities = list(LectureHall.objects.values_list('campus', flat=True).distinct())
+	facilities = unique(facilities + default_facilities)
+
 	categories = []
 	for ticket in MaintenanceTicket.objects.all():
 		category, _ = split_category_description(ticket.description)
@@ -83,25 +113,8 @@ def meta(request):
 		categories = list(
 			MaintenanceTicket.objects.values_list('equipment_type', flat=True).distinct()
 		)
-	if not facilities:
-		facilities = [
-			'Cơ sở Hà Nội',
-			'Cơ sở Hồ Chí Minh',
-			'Cơ sở Đà Nẵng',
-			'Cơ sở Huế',
-		]
-	if not categories:
-		categories = [
-			'Thiết bị điện tử',
-			'Bàn ghế',
-			'Điện - Đèn',
-			'Máy chiếu',
-			'Máy lạnh',
-			'Bảng đen/bảng trắng',
-			'Cửa sổ/Cửa ra vào',
-			'Vệ sinh',
-			'Khác',
-		]
+	categories = unique(categories + default_categories)
+
 	return Response({'facilities': facilities, 'categories': categories})
 
 
