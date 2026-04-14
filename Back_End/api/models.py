@@ -155,6 +155,25 @@ class IssueComment(models.Model):
 		db_table = 'issue_comment'
 
 
+class IssueReport(models.Model):
+	id = models.AutoField(primary_key=True)
+	ticket = models.ForeignKey(
+		MaintenanceTicket,
+		on_delete=models.CASCADE,
+		related_name='reports',
+	)
+	reporter = models.ForeignKey(
+		UserProfile,
+		on_delete=models.DO_NOTHING,
+		related_name='issue_reports',
+	)
+	created_at = models.DateTimeField(auto_now_add=True)
+
+	class Meta:
+		managed = True
+		db_table = 'issue_report'
+
+
 class UserNotification(models.Model):
 	id = models.AutoField(primary_key=True)
 	user = models.ForeignKey(

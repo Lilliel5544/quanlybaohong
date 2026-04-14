@@ -1,3 +1,6 @@
+from datetime import timedelta
+
+from django.db import transaction
 from django.middleware.csrf import get_token
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -5,7 +8,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from .models import EquipmentStatusHistory, IssueComment, LectureHall, MaintenanceTicket, UserNotification, UserProfile
+from .models import EquipmentStatusHistory, IssueComment, IssueReport, LectureHall, MaintenanceTicket, UserNotification, UserProfile
 from .serializers import CommentSerializer, IssueCreateSerializer, IssueSerializer, NotificationSerializer, RegisterSerializer, STATUS_REVERSE_MAP, UserProfileSerializer, split_category_description
 
 
@@ -281,6 +284,51 @@ class IssueViewSet(viewsets.ModelViewSet):
 
 		serializer = self.get_serializer(data=request.data)
 		serializer.is_valid(raise_exception=True)
+		validated = serializer.validated_data
+		now = timezone.now()
+		window_start = now - timedelta(hours=24)
+		room_name = validated['room'].strip()
+		facility_name = validated['facility'].strip()
+		equipment_name = validated['title'].strip()
+
+		hall = LectureHall.objects.filter(
+			hall_name__iexact=room_name,
+			campus__iexact=facility_name,
+		).first()
+
+		existing_ticket = None
+		if hall:
+			existing_ticket = (
+				MaintenanceTicket.objects.filter(
+					hall=hall,
+					equipment_type__iexact=equipment_name,
+					created_at__date=now.date(),
+					created_at__gte=window_start,
+				)
+				.exclude(status__in=['Đã sửa xong', 'Từ chối'])
+				.order_by('-created_at')
+				.first()
+			)
+
+		if existing_ticket:
+			with transaction.atomic():
+				if not IssueReport.objects.filter(ticket=existing_ticket).exists():
+					IssueReport.objects.create(
+						ticket=existing_ticket,
+						reporter=existing_ticket.reporter,
+					)
+				IssueReport.objects.create(ticket=existing_ticket, reporter=user)
+			payload = IssueSerializer(existing_ticket).data
+			return Response({'duplicate': True, 'issue': payload}, status=status.HTTP_200_OK)
+
 		request.user_profile = user
 		ticket = serializer.save()
-		return Response(IssueSerializer(ticket).data, status=status.HTTP_201_CREATED)
+		IssueReport.objects.create(ticket=ticket, reporter=user)
+		payload = IssueSerializer(ticket).data
+		return Response({'duplicate': False, 'issue': payload}, status=status.HTTP_201_CREATED)
+
+	def destroy(self, request, *args, **kwargs):
+		user = get_session_user(request)
+		if not is_admin(user):
+			return Response({'detail': 'Không có quyền.'}, status=status.HTTP_403_FORBIDDEN)
+		return super().destroy(request, *args, **kwargs)

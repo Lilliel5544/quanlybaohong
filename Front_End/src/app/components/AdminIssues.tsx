@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Textarea } from './ui/textarea';
 import { toast } from 'sonner';
-import { getIssues, getMe, getStoredUser, Issue, updateIssueStatus } from '../data/api';
+import { deleteIssue, getIssues, getMe, getStoredUser, Issue, updateIssueStatus } from '../data/api';
 
 const STATUS_OPTIONS = [
   { value: 'pending', label: 'Chờ tiếp nhận' },
@@ -79,7 +79,36 @@ export default function AdminIssues() {
     }
   };
 
-  const sortedIssues = useMemo(() => issues.slice().sort((a, b) => Number(b.id) - Number(a.id)), [issues]);
+  const handleDelete = async (issue: Issue) => {
+    const confirmed = window.confirm(`Xóa sự cố #${issue.id}? Hành động này không thể hoàn tác.`);
+    if (!confirmed) return;
+
+    setSaving((prev) => ({ ...prev, [issue.id]: true }));
+    try {
+      await deleteIssue(issue.id);
+      setIssues((prev) => prev.filter((item) => item.id !== issue.id));
+      toast.success('Đã xóa sự cố');
+    } catch (error: any) {
+      toast.error(error.message || 'Không thể xóa sự cố');
+    } finally {
+      setSaving((prev) => ({ ...prev, [issue.id]: false }));
+    }
+  };
+
+  const sortedIssues = useMemo(() => {
+    const sorted = issues.slice().sort((a, b) => Number(b.id) - Number(a.id));
+    const seen = new Set<string>();
+
+    return sorted.filter((issue) => {
+      const reportedDate = new Date(issue.reportedAt).toISOString().slice(0, 10);
+      const key = `${issue.facility}|${issue.room}|${issue.title}|${reportedDate}`.toLowerCase();
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+  }, [issues]);
 
   return (
     <div className="space-y-6">
@@ -168,7 +197,14 @@ export default function AdminIssues() {
                   </div>
                 </div>
 
-                <div className="flex justify-end">
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => handleDelete(issue)}
+                    disabled={saving[issue.id]}
+                  >
+                    Xóa báo cáo
+                  </Button>
                   <Button onClick={() => handleSave(issue)} disabled={saving[issue.id]}>
                     {saving[issue.id] ? 'Đang lưu...' : 'Lưu trạng thái'}
                   </Button>

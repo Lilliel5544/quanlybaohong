@@ -162,6 +162,7 @@ export default function IssueDetail() {
         <div>
           <h2 className="text-3xl font-bold text-gray-900">{issue.title}</h2>
           <p className="text-gray-600 mt-2">Mã sự cố: #{issue.id}</p>
+          <p className="text-sm text-gray-500">Số lượt báo cáo: {issue.reportCount ?? 1}</p>
         </div>
         <Badge className={`${getStatusBadge(issue.status)} text-sm`}>
           {getStatusText(issue.status)}

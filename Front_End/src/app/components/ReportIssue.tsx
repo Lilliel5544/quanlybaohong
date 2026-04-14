@@ -49,7 +49,15 @@ export default function ReportIssue() {
 
     setIsSubmitting(true);
     try {
-      await createIssue(formData);
+      const result = await createIssue(formData);
+      if (result.duplicate) {
+        toast.info(`Sự cố đã được báo trước đó. Đã gộp vào mã #${result.issue.id}.`);
+        setIsSubmitting(false);
+        setTimeout(() => {
+          navigate(`/issues/${result.issue.id}`);
+        }, 800);
+        return;
+      }
       toast.success('Đã gửi báo cáo sự cố thành công!');
     } catch (error: any) {
       toast.error(error.message || 'Không thể gửi báo cáo sự cố');

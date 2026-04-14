@@ -24,6 +24,7 @@ export interface Issue {
   rating?: number;
   feedback?: string;
   timeline?: TimelineEvent[];
+  reportCount?: number;
 }
 
 export interface IssueComment {
@@ -202,7 +203,7 @@ export const createIssue = async (payload: {
   facility: string;
   room: string;
   priority: string;
-}) => {
+}): Promise<{ duplicate: boolean; issue: Issue }> => {
   return apiFetch('/issues/', {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -213,6 +214,12 @@ export const updateIssueStatus = async (id: string, status: string, note?: strin
   return apiFetch(`/issues/${id}/status/`, {
     method: 'POST',
     body: JSON.stringify({ status, note }),
+  });
+};
+
+export const deleteIssue = async (id: string) => {
+  return apiFetch(`/issues/${id}/`, {
+    method: 'DELETE',
   });
 };
 

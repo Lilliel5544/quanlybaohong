@@ -36,7 +36,7 @@ export default function IssueList() {
   }, []);
 
   const filteredIssues = useMemo(() => {
-    return issues.filter((issue) => {
+    const filtered = issues.filter((issue) => {
       const matchesSearch =
         issue.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         issue.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -47,6 +47,17 @@ export default function IssueList() {
       const matchesCategory = categoryFilter === 'all' || issue.category === categoryFilter;
 
       return matchesSearch && matchesStatus && matchesFacility && matchesCategory;
+    });
+
+    const seen = new Set<string>();
+    return filtered.filter((issue) => {
+      const reportedDate = new Date(issue.reportedAt).toISOString().slice(0, 10);
+      const key = `${issue.facility}|${issue.room}|${issue.title}|${reportedDate}`.toLowerCase();
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
     });
   }, [issues, searchTerm, statusFilter, facilityFilter, categoryFilter]);
 
@@ -232,6 +243,9 @@ export default function IssueList() {
                           </Badge>
                           <span className="text-xs text-gray-500">
                             Báo cáo: {new Date(issue.reportedAt).toLocaleString('vi-VN')}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            Lượt báo cáo: {issue.reportCount ?? 1}
                           </span>
                           {issue.assignedTo && (
                             <span className="text-xs text-gray-500">

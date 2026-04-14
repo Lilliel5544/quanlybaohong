@@ -5,7 +5,7 @@ from typing import Optional
 from rest_framework import serializers
 from django.db.models import Max
 
-from .models import EquipmentStatusHistory, IssueComment, LectureHall, MaintenanceLog, MaintenanceTicket, UserNotification, UserProfile
+from .models import EquipmentStatusHistory, IssueComment, IssueReport, LectureHall, MaintenanceLog, MaintenanceTicket, UserNotification, UserProfile
 
 
 STATUS_MAP = {
@@ -87,6 +87,7 @@ class IssueSerializer(serializers.ModelSerializer):
     rating = serializers.SerializerMethodField()
     feedback = serializers.SerializerMethodField()
     timeline = serializers.SerializerMethodField()
+    reportCount = serializers.SerializerMethodField()
 
     class Meta:
         model = MaintenanceTicket
@@ -108,6 +109,7 @@ class IssueSerializer(serializers.ModelSerializer):
             'rating',
             'feedback',
             'timeline',
+            'reportCount',
         ]
 
     def get_title(self, obj: MaintenanceTicket) -> str:
@@ -183,6 +185,10 @@ class IssueSerializer(serializers.ModelSerializer):
                 'performer': obj.reporter.full_name if obj.reporter else 'Hệ thống',
             })
         return events
+
+    def get_reportCount(self, obj: MaintenanceTicket) -> int:
+        count = IssueReport.objects.filter(ticket=obj).count()
+        return count if count > 0 else 1
 
 
 class IssueCreateSerializer(serializers.Serializer):
