@@ -1,58 +1,29 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router';
-import { ArrowLeft, Calendar, User, MapPin, Tag, AlertCircle, CheckCircle2, Clock, Play, Pause, Wrench } from 'lucide-react';
+import { ArrowLeft, Calendar, User, MapPin, Tag, AlertCircle, CheckCircle2, Star, Clock, Play, Pause, Wrench, Hammer } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Separator } from './ui/separator';
 import { Textarea } from './ui/textarea';
 import { toast } from 'sonner';
-import { createIssueComment, getIssue, getIssueComments, Issue, IssueComment } from '../data/api';
+import { getIssueById, equipmentPerRoom } from '../data/mockData';
 
 export default function IssueDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [issue, setIssue] = useState<Issue | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState('');
+  const issue = getIssueById(id || '');
   
-  const [comments, setComments] = useState<IssueComment[]>([]);
-  const [commentInput, setCommentInput] = useState('');
-  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
-
-  useEffect(() => {
-    const loadIssue = async () => {
-      if (!id) return;
-      try {
-        const [data, commentData] = await Promise.all([
-          getIssue(id),
-          getIssueComments(id),
-        ]);
-        setIssue(data);
-        setComments(commentData || []);
-      } catch (error: any) {
-        setLoadError(error.message || 'Không thể tải chi tiết sự cố');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadIssue();
-  }, [id]);
-
-  if (isLoading) {
-    return (
-      <div className="text-center py-12">
-        <h2 className="text-2xl font-bold text-gray-900">Đang tải dữ liệu...</h2>
-      </div>
-    );
-  }
+  const [rating, setRating] = useState(issue?.rating || 0);
+  const [hoveredRating, setHoveredRating] = useState(0);
+  const [feedback, setFeedback] = useState(issue?.feedback || '');
+  const [hasSubmitted, setHasSubmitted] = useState(!!(issue?.rating || issue?.feedback));
 
   if (!issue) {
     return (
       <div className="text-center py-12">
         <h2 className="text-2xl font-bold text-gray-900">Không tìm thấy sự cố</h2>
-        <p className="text-gray-600 mt-2">{loadError || 'Sự cố bạn đang tìm kiếm không tồn tại'}</p>
+        <p className="text-gray-600 mt-2">Sự cố bạn đang tìm kiếm không tồn tại</p>
         <Link to="/issues">
           <Button className="mt-4">Quay lại danh sách</Button>
         </Link>
@@ -60,27 +31,15 @@ export default function IssueDetail() {
     );
   }
 
-  const handleSubmitComment = async () => {
-    if (!issue) {
-      toast.error('Không tìm thấy sự cố để bình luận');
+  const handleSubmitRating = () => {
+    if (rating === 0) {
+      toast.error('Vui lòng chọn số sao đánh giá');
       return;
     }
-    if (!commentInput.trim()) {
-      toast.error('Vui lòng nhập bình luận');
-      return;
-    }
-
-    setIsSubmittingComment(true);
-    try {
-      const created = await createIssueComment(issue.id, commentInput.trim());
-      setComments((prev) => [...prev, created]);
-      setCommentInput('');
-      toast.success('Đã gửi bình luận');
-    } catch (error: any) {
-      toast.error(error.message || 'Không thể gửi bình luận');
-    } finally {
-      setIsSubmittingComment(false);
-    }
+    
+    // In a real app, this would send to backend
+    toast.success('Đã gửi đánh giá thành công!');
+    setHasSubmitted(true);
   };
 
   const getPriorityBadge = (priority: string) => {
@@ -149,6 +108,11 @@ export default function IssueDetail() {
     return colors[status] || 'bg-gray-600';
   };
 
+  const getEquipmentName = (equipmentId: string) => {
+    const equipment = equipmentPerRoom.find(e => e.id === equipmentId);
+    return equipment?.name || equipmentId;
+  };
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       {/* Back Button */}
@@ -162,7 +126,6 @@ export default function IssueDetail() {
         <div>
           <h2 className="text-3xl font-bold text-gray-900">{issue.title}</h2>
           <p className="text-gray-600 mt-2">Mã sự cố: #{issue.id}</p>
-          <p className="text-sm text-gray-500">Số lượt báo cáo: {issue.reportCount ?? 1}</p>
         </div>
         <Badge className={`${getStatusBadge(issue.status)} text-sm`}>
           {getStatusText(issue.status)}
@@ -191,18 +154,36 @@ export default function IssueDetail() {
                 <div>
                   <p className="text-sm text-gray-500">Vị trí</p>
                   <p className="font-semibold text-gray-900">
-                    {issue.facility} - Phòng {issue.room}
+                    {issue.facility}
                   </p>
+                  {issue.building && issue.floor && (
+                    <p className="text-sm text-gray-600 mt-1">
+                      {issue.building} - Tầng {issue.floor} - Phòng {issue.room}
+                    </p>
+                  )}
+                  {!issue.building && (
+                    <p className="text-sm text-gray-600 mt-1">
+                      Phòng {issue.room}
+                    </p>
+                  )}
                 </div>
               </div>
 
-              <div className="flex items-start gap-3">
-                <Tag className="w-5 h-5 text-gray-400 mt-0.5" />
-                <div>
-                  <p className="text-sm text-gray-500">Loại sự cố</p>
-                  <p className="font-semibold text-gray-900">{issue.category}</p>
+              {issue.damagedEquipment && issue.damagedEquipment.length > 0 && (
+                <div className="flex items-start gap-3">
+                  <Hammer className="w-5 h-5 text-gray-400 mt-0.5" />
+                  <div>
+                    <p className="text-sm text-gray-500">Thiết bị bị hỏng</p>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {issue.damagedEquipment.map((equipId) => (
+                        <Badge key={equipId} variant="outline" className="text-xs">
+                          {getEquipmentName(equipId)}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="flex items-start gap-3">
                 <AlertCircle className="w-5 h-5 text-gray-400 mt-0.5" />
@@ -221,6 +202,9 @@ export default function IssueDetail() {
                 <div>
                   <p className="text-sm text-gray-500">Người báo cáo</p>
                   <p className="font-semibold text-gray-900">{issue.reportedBy}</p>
+                  <p className="text-sm text-gray-600 mt-0.5">
+                    Mã: {issue.reporterCode}
+                  </p>
                 </div>
               </div>
 
@@ -273,43 +257,89 @@ export default function IssueDetail() {
         </CardContent>
       </Card>
 
-      {/* Comments */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Bình luận</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-3">
-            {comments.length === 0 ? (
-              <p className="text-sm text-gray-500">Chưa có bình luận nào</p>
-            ) : (
-              comments.map((comment) => (
-                <div key={comment.id} className="border border-gray-200 rounded-lg p-3">
-                  <p className="text-sm font-semibold text-gray-900">
-                    {comment.userFullName || comment.userName}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    {new Date(comment.createdAt).toLocaleString('vi-VN')}
-                  </p>
-                  <p className="text-sm text-gray-700 mt-2">{comment.comment}</p>
+      {/* Rating & Feedback Section - Only for resolved issues */}
+      {issue.status === 'resolved' && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Đánh giá</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {hasSubmitted && issue.rating ? (
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm text-gray-600 mb-2">Đánh giá của bạn:</p>
+                  <div className="flex items-center gap-1">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <Star
+                        key={star}
+                        className={`w-8 h-8 ${
+                          star <= (issue.rating || 0)
+                            ? 'fill-yellow-400 text-yellow-400'
+                            : 'text-gray-300'
+                        }`}
+                      />
+                    ))}
+                    <span className="ml-2 text-lg font-semibold">{issue.rating}/5</span>
+                  </div>
                 </div>
-              ))
-            )}
-          </div>
+                {issue.feedback && (
+                  <div>
+                    <p className="text-sm text-gray-600 mb-2">Phản hồi:</p>
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <p className="text-gray-700">{issue.feedback}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm text-gray-600 mb-2">
+                    Đánh giá chất lượng xử lý <span className="text-red-500">*</span>
+                  </p>
+                  <div className="flex items-center gap-1">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        type="button"
+                        onMouseEnter={() => setHoveredRating(star)}
+                        onMouseLeave={() => setHoveredRating(0)}
+                        onClick={() => setRating(star)}
+                        className="transition-transform hover:scale-110"
+                      >
+                        <Star
+                          className={`w-10 h-10 ${
+                            star <= (hoveredRating || rating)
+                              ? 'fill-yellow-400 text-yellow-400'
+                              : 'text-gray-300'
+                          }`}
+                        />
+                      </button>
+                    ))}
+                    {rating > 0 && (
+                      <span className="ml-2 text-lg font-semibold">{rating}/5</span>
+                    )}
+                  </div>
+                </div>
 
-          <div className="space-y-2">
-            <Textarea
-              placeholder="Nhập bình luận của bạn..."
-              value={commentInput}
-              onChange={(e) => setCommentInput(e.target.value)}
-              rows={3}
-            />
-            <Button onClick={handleSubmitComment} disabled={isSubmittingComment}>
-              {isSubmittingComment ? 'Đang gửi...' : 'Gửi bình luận'}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+                <div>
+                  <p className="text-sm text-gray-600 mb-2">Phản hồi chi tiết</p>
+                  <Textarea
+                    placeholder="Nhập ý kiến phản hồi về quá trình xử lý sự cố..."
+                    value={feedback}
+                    onChange={(e) => setFeedback(e.target.value)}
+                    rows={4}
+                  />
+                </div>
+
+                <Button onClick={handleSubmitRating} className="w-full">
+                  Gửi đánh giá
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Timeline Card */}
       <Card>

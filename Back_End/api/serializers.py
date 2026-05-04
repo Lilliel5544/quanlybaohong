@@ -5,7 +5,7 @@ from typing import Optional
 from rest_framework import serializers
 from django.db.models import Max
 
-from .models import EquipmentStatusHistory, IssueComment, IssueReport, LectureHall, MaintenanceLog, MaintenanceTicket, UserNotification, UserProfile
+from .models import EquipmentStatusHistory, IssueComment, IssueDamagedEquipment, IssueReport, LectureHall, MaintenanceLog, MaintenanceTicket, UserNotification, UserProfile
 
 
 STATUS_MAP = {
@@ -75,10 +75,14 @@ class IssueSerializer(serializers.ModelSerializer):
     description = serializers.SerializerMethodField()
     category = serializers.SerializerMethodField()
     facility = serializers.SerializerMethodField()
+    building = serializers.SerializerMethodField()
+    floor = serializers.SerializerMethodField()
     room = serializers.SerializerMethodField()
+    damagedEquipment = serializers.SerializerMethodField()
     status = serializers.SerializerMethodField()
     priority = serializers.SerializerMethodField()
     reportedBy = serializers.SerializerMethodField()
+    reporterCode = serializers.SerializerMethodField()
     reportedAt = serializers.DateTimeField(source='created_at')
     assignedTo = serializers.SerializerMethodField()
     resolvedAt = serializers.SerializerMethodField()
@@ -87,6 +91,7 @@ class IssueSerializer(serializers.ModelSerializer):
     rating = serializers.SerializerMethodField()
     feedback = serializers.SerializerMethodField()
     timeline = serializers.SerializerMethodField()
+    isDuplicate = serializers.SerializerMethodField()
     reportCount = serializers.SerializerMethodField()
 
     class Meta:
@@ -97,10 +102,14 @@ class IssueSerializer(serializers.ModelSerializer):
             'description',
             'category',
             'facility',
+            'building',
+            'floor',
             'room',
+            'damagedEquipment',
             'status',
             'priority',
             'reportedBy',
+            'reporterCode',
             'reportedAt',
             'assignedTo',
             'resolvedAt',
@@ -109,6 +118,7 @@ class IssueSerializer(serializers.ModelSerializer):
             'rating',
             'feedback',
             'timeline',
+            'isDuplicate',
             'reportCount',
         ]
 
@@ -126,8 +136,19 @@ class IssueSerializer(serializers.ModelSerializer):
     def get_facility(self, obj: MaintenanceTicket) -> str:
         return obj.hall.campus if obj.hall else ''
 
+    def get_building(self, obj: MaintenanceTicket) -> str:
+        return obj.hall.block if obj.hall and obj.hall.block else ''
+
+    def get_floor(self, obj: MaintenanceTicket) -> Optional[str]:
+        if obj.hall and obj.hall.floor is not None:
+            return str(obj.hall.floor)
+        return None
+
     def get_room(self, obj: MaintenanceTicket) -> str:
         return obj.hall.hall_name if obj.hall else ''
+
+    def get_damagedEquipment(self, obj: MaintenanceTicket) -> list[str]:
+        return list(obj.damaged_equipment.values_list('equipment_id', flat=True))
 
     def get_status(self, obj: MaintenanceTicket) -> str:
         return STATUS_MAP.get(obj.status, obj.status)
@@ -137,6 +158,9 @@ class IssueSerializer(serializers.ModelSerializer):
 
     def get_reportedBy(self, obj: MaintenanceTicket) -> str:
         return obj.reporter.full_name if obj.reporter else ''
+
+    def get_reporterCode(self, obj: MaintenanceTicket) -> str:
+        return obj.reporter.username if obj.reporter else ''
 
     def get_assignedTo(self, obj: MaintenanceTicket) -> Optional[str]:
         return obj.technician.full_name if obj.technician else None
@@ -190,32 +214,75 @@ class IssueSerializer(serializers.ModelSerializer):
         count = IssueReport.objects.filter(ticket=obj).count()
         return count if count > 0 else 1
 
+    def get_isDuplicate(self, obj: MaintenanceTicket) -> bool:
+        return self.get_reportCount(obj) > 1
+
 
 class IssueCreateSerializer(serializers.Serializer):
     title = serializers.CharField(max_length=100)
     description = serializers.CharField()
-    category = serializers.CharField(max_length=100)
+    category = serializers.CharField(max_length=100, required=False, allow_blank=True)
     facility = serializers.CharField(max_length=50)
     room = serializers.CharField(max_length=50)
     priority = serializers.ChoiceField(choices=list(PRIORITY_REVERSE_MAP.keys()))
+    building = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    floor = serializers.CharField(max_length=10, required=False, allow_blank=True)
+    damagedEquipment = serializers.ListField(
+        child=serializers.CharField(),
+        required=False,
+        allow_empty=True,
+    )
+    reportedBy = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    reporterCode = serializers.CharField(max_length=50, required=False, allow_blank=True)
 
     def create(self, validated_data):
         request = self.context['request']
         user: UserProfile = request.user_profile
+        building = (validated_data.get('building') or '').strip()
+        floor_raw = (validated_data.get('floor') or '').strip()
+        floor_value = None
+        if floor_raw.isdigit():
+            floor_value = int(floor_raw)
         hall, _ = LectureHall.objects.get_or_create(
             hall_name=validated_data['room'],
             campus=validated_data['facility'],
-            defaults={'block': 'N/A', 'floor': None},
+            defaults={
+                'block': building or 'N/A',
+                'floor': floor_value,
+            },
         )
 
-        return MaintenanceTicket.objects.create(
+        if building and hall.block in {'', 'N/A', None}:
+            hall.block = building
+        if floor_value is not None and hall.floor is None:
+            hall.floor = floor_value
+        if building and hall.block == building and (floor_value is not None and hall.floor == floor_value):
+            hall.save(update_fields=['block', 'floor'])
+        elif hall.block != 'N/A' or hall.floor is not None:
+            hall.save(update_fields=['block', 'floor'])
+
+        category_value = (validated_data.get('category') or '').strip()
+        if not category_value:
+            category_value = validated_data['title']
+
+        ticket = MaintenanceTicket.objects.create(
             reporter=user,
             hall=hall,
             equipment_type=validated_data['title'],
-            description=build_description(validated_data['category'], validated_data['description']),
+            description=build_description(category_value, validated_data['description']),
             priority=PRIORITY_REVERSE_MAP.get(validated_data['priority'], 'Trung bình'),
             status='Chờ tiếp nhận',
         )
+
+        damaged_items = validated_data.get('damagedEquipment') or []
+        if damaged_items:
+            IssueDamagedEquipment.objects.bulk_create([
+                IssueDamagedEquipment(ticket=ticket, equipment_id=item)
+                for item in damaged_items
+                if item
+            ])
+
+        return ticket
 
 
 class CommentSerializer(serializers.ModelSerializer):

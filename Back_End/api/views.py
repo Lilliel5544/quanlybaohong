@@ -123,6 +123,83 @@ def meta(request):
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
+def catalog(request):
+	default_facilities = [
+		'Cơ sở Hà Nội',
+		'Cơ sở Hồ Chí Minh',
+		'Cơ sở Đà Nẵng',
+		'Cơ sở Huế',
+	]
+	default_buildings = [
+		{'id': 'A1', 'name': 'Tòa A1', 'floors': 6},
+		{'id': 'A2', 'name': 'Tòa A2', 'floors': 8},
+		{'id': 'A3', 'name': 'Tòa A3', 'floors': 6},
+	]
+	default_large_rooms = ['101', '102', '201', '202']
+	default_equipment_per_room = [
+		{'id': 'desk', 'name': 'Bộ bàn ghế', 'quantity': 30},
+		{'id': 'ac', 'name': 'Điều hòa', 'quantity': 4},
+		{'id': 'fan', 'name': 'Quạt trần', 'quantity': 6},
+		{'id': 'light', 'name': 'Bóng đèn', 'quantity': 8},
+		{'id': 'projector', 'name': 'Máy chiếu', 'quantity': 1},
+		{'id': 'board', 'name': 'Bảng', 'quantity': 1},
+		{'id': 'microphone', 'name': 'Micro', 'quantity': 1},
+		{'id': 'outlet', 'name': 'Ổ điện', 'quantity': 12},
+		{'id': 'door', 'name': 'Cửa ra vào', 'quantity': 3},
+		{'id': 'window', 'name': 'Cửa sổ', 'quantity': 4},
+	]
+	default_equipment_per_large_room = [
+		{'id': 'desk', 'name': 'Bộ bàn ghế', 'quantity': 50},
+		{'id': 'ac', 'name': 'Điều hòa', 'quantity': 6},
+		{'id': 'fan', 'name': 'Quạt trần', 'quantity': 6},
+		{'id': 'light', 'name': 'Bóng đèn', 'quantity': 12},
+		{'id': 'tv', 'name': 'Ti vi', 'quantity': 2},
+		{'id': 'projector', 'name': 'Máy chiếu', 'quantity': 1},
+		{'id': 'board', 'name': 'Bảng', 'quantity': 1},
+		{'id': 'microphone', 'name': 'Micro', 'quantity': 1},
+		{'id': 'door', 'name': 'Cửa ra vào', 'quantity': 2},
+		{'id': 'window', 'name': 'Cửa sổ', 'quantity': 4},
+	]
+
+	def unique(items):
+		seen = set()
+		result = []
+		for item in items:
+			if not item or item in seen:
+				continue
+			seen.add(item)
+			result.append(item)
+		return result
+
+	facilities = list(LectureHall.objects.values_list('campus', flat=True).distinct())
+	facilities = unique(facilities + default_facilities)
+
+	building_map: dict[str, int] = {}
+	for block, floor in LectureHall.objects.values_list('block', 'floor').distinct():
+		if not block:
+			continue
+		current_floor = building_map.get(block, 0)
+		floor_value = int(floor) if floor is not None else 0
+		building_map[block] = max(current_floor, floor_value)
+
+	buildings = [
+		{'id': block, 'name': f"Tòa {block}", 'floors': max(1, floors)}
+		for block, floors in building_map.items()
+	]
+	if not buildings:
+		buildings = default_buildings
+
+	return Response({
+		'facilities': facilities,
+		'buildings': buildings,
+		'largeRooms': default_large_rooms,
+		'equipmentPerRoom': default_equipment_per_room,
+		'equipmentPerLargeRoom': default_equipment_per_large_room,
+	})
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
 def notifications(request):
 	user = get_session_user(request)
 	if not user:
@@ -251,7 +328,7 @@ class IssueViewSet(viewsets.ModelViewSet):
 	queryset = (
 		MaintenanceTicket.objects
 		.select_related('hall', 'reporter', 'technician')
-		.prefetch_related('logs', 'status_history')
+		.prefetch_related('logs', 'status_history', 'damaged_equipment')
 		.order_by('-created_at')
 	)
 	serializer_class = IssueSerializer

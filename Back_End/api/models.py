@@ -174,6 +174,21 @@ class IssueReport(models.Model):
 		db_table = 'issue_report'
 
 
+class IssueDamagedEquipment(models.Model):
+	id = models.AutoField(primary_key=True)
+	ticket = models.ForeignKey(
+		MaintenanceTicket,
+		on_delete=models.CASCADE,
+		related_name='damaged_equipment',
+	)
+	equipment_id = models.CharField(max_length=50)
+	created_at = models.DateTimeField(auto_now_add=True)
+
+	class Meta:
+		managed = True
+		db_table = 'issue_damaged_equipment'
+
+
 class UserNotification(models.Model):
 	id = models.AutoField(primary_key=True)
 	user = models.ForeignKey(

@@ -1,43 +1,33 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, Link } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Separator } from './ui/separator';
-import { User, Mail, Shield, Calendar, LogOut, CheckCircle, XCircle } from 'lucide-react';
+import { User, Mail, Shield, Calendar, LogOut, CheckCircle, XCircle, FileText, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
-import { getMe, getStoredUser, logout } from '../data/api';
+import { getCurrentUser, logout } from '../data/authData';
+import { mockIssues } from '../data/mockData';
 
 export default function Profile() {
   const navigate = useNavigate();
-  const [user, setUser] = useState(getStoredUser());
+  const [user, setUser] = useState(getCurrentUser());
 
   useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const data = await getMe();
-        setUser(data);
-      } catch {
-        toast.error('Vui lòng đăng nhập để truy cập trang này');
-        navigate('/login');
-      }
-    };
-
-    loadUser();
-  }, [navigate]);
+    if (!user) {
+      toast.error('Vui lòng đăng nhập để truy cập trang này');
+      navigate('/login');
+    }
+  }, [user, navigate]);
 
   if (!user) {
     return null;
   }
 
-  const handleLogout = async () => {
-    try {
-      await logout();
-      toast.success('Đã đăng xuất thành công');
-      navigate('/login');
-    } catch (error: any) {
-      toast.error(error.message || 'Không thể đăng xuất');
-    }
+  const handleLogout = () => {
+    logout();
+    toast.success('Đã đăng xuất thành công');
+    navigate('/');
   };
 
   const getRoleBadge = (role: string) => {
@@ -50,6 +40,29 @@ export default function Profile() {
   };
 
   const roleConfig = getRoleBadge(user.role);
+
+  // Get user's reported issues
+  const userIssues = mockIssues.filter(issue => issue.reporterCode === user.username);
+
+  const getStatusBadge = (status: string) => {
+    const colors: Record<string, string> = {
+      pending: 'bg-yellow-100 text-yellow-800',
+      'in-progress': 'bg-orange-100 text-orange-800',
+      resolved: 'bg-green-100 text-green-800',
+      rejected: 'bg-red-100 text-red-800',
+    };
+    return colors[status] || 'bg-gray-100 text-gray-800';
+  };
+
+  const getStatusText = (status: string) => {
+    const texts: Record<string, string> = {
+      pending: 'Chờ xử lý',
+      'in-progress': 'Đang xử lý',
+      resolved: 'Đã xử lý',
+      rejected: 'Từ chối',
+    };
+    return texts[status] || status;
+  };
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -136,7 +149,7 @@ export default function Profile() {
                 <Mail className="w-5 h-5 text-gray-400 mt-0.5" />
                 <div>
                   <p className="text-sm text-gray-500">Email</p>
-                  <p className="font-semibold text-gray-900">{user.email || '-'}</p>
+                  <p className="font-semibold text-gray-900">{user.email}</p>
                 </div>
               </div>
 
@@ -155,7 +168,7 @@ export default function Profile() {
                 <div>
                   <p className="text-sm text-gray-500">Ngày tạo tài khoản</p>
                   <p className="font-semibold text-gray-900">
-                    {user.createdAt ? new Date(user.createdAt).toLocaleDateString('vi-VN') : '-'}
+                    {new Date(user.createdAt).toLocaleDateString('vi-VN')}
                   </p>
                 </div>
               </div>
@@ -210,6 +223,76 @@ export default function Profile() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Report History - Only for users and technicians */}
+      {(user.role === 'user' || user.role === 'technician') && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                Lịch sử báo cáo ({userIssues.length})
+              </CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {userIssues.length === 0 ? (
+              <div className="text-center py-8">
+                <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-500">Bạn chưa có báo cáo nào</p>
+                <Link to="/report">
+                  <Button className="mt-4" size="sm">
+                    Tạo báo cáo mới
+                  </Button>
+                </Link>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {userIssues
+                  .sort((a, b) => new Date(b.reportedAt).getTime() - new Date(a.reportedAt).getTime())
+                  .map((issue) => (
+                    <Link key={issue.id} to={`/issues/${issue.id}`}>
+                      <div className="p-4 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-all">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start gap-2 mb-2">
+                              <h4 className="font-semibold text-gray-900 line-clamp-1">
+                                {issue.title}
+                              </h4>
+                              <Badge className={`${getStatusBadge(issue.status)} text-xs whitespace-nowrap`}>
+                                {getStatusText(issue.status)}
+                              </Badge>
+                            </div>
+                            <p className="text-sm text-gray-600 line-clamp-1 mb-2">
+                              {issue.description}
+                            </p>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge variant="outline" className="text-xs">
+                                {issue.facility}
+                              </Badge>
+                              <Badge variant="outline" className="text-xs">
+                                {issue.building} - Phòng {issue.room}
+                              </Badge>
+                              <span className="text-xs text-gray-500">
+                                {new Date(issue.reportedAt).toLocaleDateString('vi-VN')}
+                              </span>
+                              {issue.isDuplicate && (
+                                <Badge variant="destructive" className="text-xs">
+                                  Trùng lặp
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                          <ChevronRight className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Security Notice */}
       <Card>

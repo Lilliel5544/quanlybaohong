@@ -1,42 +1,20 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Link } from 'react-router';
 import { Search, Filter } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Input } from './ui/input';
 import { Badge } from './ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { getIssues, getMeta, Issue } from '../data/api';
-import { toast } from 'sonner';
+import { mockIssues, facilities, equipmentPerRoom, buildings } from '../data/mockData';
 
 export default function IssueList() {
-  const [issues, setIssues] = useState<Issue[]>([]);
-  const [facilities, setFacilities] = useState<string[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [facilityFilter, setFacilityFilter] = useState('all');
-  const [categoryFilter, setCategoryFilter] = useState('all');
-
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const [issueData, meta] = await Promise.all([getIssues(), getMeta()]);
-        setIssues(issueData);
-        setFacilities(meta.facilities || []);
-        setCategories(meta.categories || []);
-      } catch (error: any) {
-        toast.error(error.message || 'Không thể tải danh sách sự cố');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadData();
-  }, []);
+  const [buildingFilter, setBuildingFilter] = useState('all');
 
   const filteredIssues = useMemo(() => {
-    const filtered = issues.filter((issue) => {
+    return mockIssues.filter((issue) => {
       const matchesSearch =
         issue.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         issue.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -44,22 +22,11 @@ export default function IssueList() {
 
       const matchesStatus = statusFilter === 'all' || issue.status === statusFilter;
       const matchesFacility = facilityFilter === 'all' || issue.facility === facilityFilter;
-      const matchesCategory = categoryFilter === 'all' || issue.category === categoryFilter;
+      const matchesBuilding = buildingFilter === 'all' || issue.building === buildingFilter;
 
-      return matchesSearch && matchesStatus && matchesFacility && matchesCategory;
+      return matchesSearch && matchesStatus && matchesFacility && matchesBuilding;
     });
-
-    const seen = new Set<string>();
-    return filtered.filter((issue) => {
-      const reportedDate = new Date(issue.reportedAt).toISOString().slice(0, 10);
-      const key = `${issue.facility}|${issue.room}|${issue.title}|${reportedDate}`.toLowerCase();
-      if (seen.has(key)) {
-        return false;
-      }
-      seen.add(key);
-      return true;
-    });
-  }, [issues, searchTerm, statusFilter, facilityFilter, categoryFilter]);
+  }, [searchTerm, statusFilter, facilityFilter, buildingFilter]);
 
   const getPriorityBadge = (priority: string) => {
     const variants: Record<string, any> = {
@@ -99,6 +66,11 @@ export default function IssueList() {
       low: 'Thấp',
     };
     return texts[priority] || priority;
+  };
+
+  const getEquipmentName = (equipmentId: string) => {
+    const equipment = equipmentPerRoom.find(e => e.id === equipmentId);
+    return equipment?.name || equipmentId;
   };
 
   return (
@@ -164,15 +136,15 @@ export default function IssueList() {
             </div>
 
             <div>
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <Select value={buildingFilter} onValueChange={setBuildingFilter}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Tất cả loại sự cố</SelectItem>
-                  {categories.map((category) => (
-                    <SelectItem key={category} value={category}>
-                      {category}
+                  <SelectItem value="all">Tất cả tòa nhà</SelectItem>
+                  {buildings.map((building) => (
+                    <SelectItem key={building.id} value={building.id}>
+                      {building.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -190,15 +162,7 @@ export default function IssueList() {
           </p>
         </div>
 
-        {isLoading ? (
-          <Card>
-            <CardContent className="py-12">
-              <div className="text-center text-gray-500">
-                <p className="text-lg font-semibold">Đang tải dữ liệu...</p>
-              </div>
-            </CardContent>
-          </Card>
-        ) : filteredIssues.length === 0 ? (
+        {filteredIssues.length === 0 ? (
           <Card>
             <CardContent className="py-12">
               <div className="text-center text-gray-500">
@@ -232,20 +196,43 @@ export default function IssueList() {
                           <Badge variant="outline" className="text-xs">
                             {issue.facility}
                           </Badge>
+                          {issue.building && issue.floor && (
+                            <>
+                              <Badge variant="outline" className="text-xs">
+                                {issue.building}
+                              </Badge>
+                              <Badge variant="outline" className="text-xs">
+                                Tầng {issue.floor}
+                              </Badge>
+                            </>
+                          )}
                           <Badge variant="outline" className="text-xs">
                             Phòng {issue.room}
-                          </Badge>
-                          <Badge variant="outline" className="text-xs">
-                            {issue.category}
                           </Badge>
                           <Badge variant={getPriorityBadge(issue.priority)} className="text-xs">
                             {getPriorityText(issue.priority)}
                           </Badge>
+                          {issue.isDuplicate && (
+                            <Badge variant="destructive" className="text-xs">
+                              Trùng lặp
+                            </Badge>
+                          )}
+                        </div>
+
+                        {issue.damagedEquipment && issue.damagedEquipment.length > 0 && (
+                          <div className="mt-2 flex flex-wrap items-center gap-1">
+                            <span className="text-xs text-gray-500 mr-1">Thiết bị:</span>
+                            {issue.damagedEquipment.map((equipId) => (
+                              <Badge key={equipId} variant="secondary" className="text-xs">
+                                {getEquipmentName(equipId)}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+
+                        <div className="flex flex-wrap items-center gap-2 mt-2">
                           <span className="text-xs text-gray-500">
                             Báo cáo: {new Date(issue.reportedAt).toLocaleString('vi-VN')}
-                          </span>
-                          <span className="text-xs text-gray-500">
-                            Lượt báo cáo: {issue.reportCount ?? 1}
                           </span>
                           {issue.assignedTo && (
                             <span className="text-xs text-gray-500">
