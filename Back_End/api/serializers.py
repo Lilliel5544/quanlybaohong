@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from typing import Optional
 
+import re
+
 from rest_framework import serializers
-from django.db.models import Max
+from django.db.models import Count, Max
+from django.utils import timezone
 
 from .models import EquipmentStatusHistory, IssueComment, IssueDamagedEquipment, IssueReport, LectureHall, MaintenanceLog, MaintenanceTicket, UserNotification, UserProfile
 
@@ -24,6 +27,13 @@ PRIORITY_MAP = {
 
 STATUS_REVERSE_MAP = {value: key for key, value in STATUS_MAP.items()}
 PRIORITY_REVERSE_MAP = {value: key for key, value in PRIORITY_MAP.items()}
+
+ROLE_FRONTEND_MAP = {
+    'Admin': 'admin',
+    'Kỹ thuật viên': 'technician',
+    'Giảng viên': 'user',
+    'Sinh viên': 'user',
+}
 
 TIMELINE_STATUS_MAP = {
     'Chờ tiếp nhận': 'reported',
@@ -65,9 +75,35 @@ def parse_status_note(note: Optional[str]) -> tuple[Optional[str], Optional[str]
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
+    fullName = serializers.CharField(source='full_name')
+    role = serializers.SerializerMethodField()
+    email = serializers.SerializerMethodField()
+    isActive = serializers.BooleanField(source='is_active')
+    createdAt = serializers.SerializerMethodField()
+    lastLogin = serializers.SerializerMethodField()
+
     class Meta:
         model = UserProfile
-        fields = ['id', 'username', 'full_name', 'role', 'is_active', 'phone_no']
+        fields = ['id', 'username', 'fullName', 'role', 'email', 'isActive', 'createdAt', 'lastLogin']
+
+    def get_role(self, obj: UserProfile) -> str:
+        return ROLE_FRONTEND_MAP.get(obj.role, 'user')
+
+    def get_email(self, obj: UserProfile) -> str:
+        if obj.email:
+            return obj.email
+        username = (obj.username or '').strip().lower()
+        if '@' in username:
+            return username
+        return f"{username}@ptit.edu.vn" if username else ''
+
+    def get_createdAt(self, obj: UserProfile):
+        if obj.created_at:
+            return obj.created_at
+        return timezone.now()
+
+    def get_lastLogin(self, obj: UserProfile):
+        return obj.last_login
 
 
 class IssueSerializer(serializers.ModelSerializer):
@@ -147,8 +183,17 @@ class IssueSerializer(serializers.ModelSerializer):
     def get_room(self, obj: MaintenanceTicket) -> str:
         return obj.hall.hall_name if obj.hall else ''
 
-    def get_damagedEquipment(self, obj: MaintenanceTicket) -> list[str]:
-        return list(obj.damaged_equipment.values_list('equipment_id', flat=True))
+    def get_damagedEquipment(self, obj: MaintenanceTicket) -> list[dict[str, int | str]]:
+        counts = (
+            obj.damaged_equipment
+            .values('equipment_id')
+            .annotate(quantity=Count('equipment_id'))
+            .order_by('equipment_id')
+        )
+        return [
+            {'equipmentId': item['equipment_id'], 'quantity': item['quantity']}
+            for item in counts
+        ]
 
     def get_status(self, obj: MaintenanceTicket) -> str:
         return STATUS_MAP.get(obj.status, obj.status)
@@ -228,16 +273,44 @@ class IssueCreateSerializer(serializers.Serializer):
     building = serializers.CharField(max_length=20, required=False, allow_blank=True)
     floor = serializers.CharField(max_length=10, required=False, allow_blank=True)
     damagedEquipment = serializers.ListField(
-        child=serializers.CharField(),
+        child=serializers.JSONField(),
         required=False,
         allow_empty=True,
     )
     reportedBy = serializers.CharField(max_length=100, required=False, allow_blank=True)
     reporterCode = serializers.CharField(max_length=50, required=False, allow_blank=True)
 
+    def validate_damagedEquipment(self, value):
+        normalized = []
+        for item in value:
+            if isinstance(item, str):
+                equipment_id = item.strip()
+                quantity = 1
+            elif isinstance(item, dict):
+                equipment_id = (
+                    str(item.get('equipmentId') or item.get('equipment_id') or '')
+                ).strip()
+                quantity = item.get('quantity', 1)
+            else:
+                raise serializers.ValidationError('Thiết bị hỏng không hợp lệ.')
+
+            if not equipment_id:
+                continue
+
+            try:
+                quantity = int(quantity)
+            except (TypeError, ValueError):
+                raise serializers.ValidationError('Số lượng thiết bị không hợp lệ.')
+
+            if quantity < 1:
+                continue
+
+            normalized.append({'equipmentId': equipment_id, 'quantity': quantity})
+
+        return normalized
+
     def create(self, validated_data):
-        request = self.context['request']
-        user: UserProfile = request.user_profile
+        user: UserProfile = self.context['reporter']
         building = (validated_data.get('building') or '').strip()
         floor_raw = (validated_data.get('floor') or '').strip()
         floor_value = None
@@ -276,11 +349,15 @@ class IssueCreateSerializer(serializers.Serializer):
 
         damaged_items = validated_data.get('damagedEquipment') or []
         if damaged_items:
-            IssueDamagedEquipment.objects.bulk_create([
-                IssueDamagedEquipment(ticket=ticket, equipment_id=item)
-                for item in damaged_items
-                if item
-            ])
+            equipment_rows = []
+            for item in damaged_items:
+                equipment_id = item.get('equipmentId')
+                quantity = item.get('quantity', 1)
+                for _ in range(max(int(quantity), 1)):
+                    equipment_rows.append(
+                        IssueDamagedEquipment(ticket=ticket, equipment_id=equipment_id)
+                    )
+            IssueDamagedEquipment.objects.bulk_create(equipment_rows)
 
         return ticket
 
@@ -309,12 +386,18 @@ class RegisterSerializer(serializers.Serializer):
     username = serializers.CharField(max_length=50)
     password = serializers.CharField(max_length=255)
     full_name = serializers.CharField(max_length=100)
+    email = serializers.EmailField(required=False, allow_blank=True)
+    userType = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    facility = serializers.CharField(max_length=100, required=False, allow_blank=True)
     phone_no = serializers.CharField(max_length=15, required=False, allow_blank=True)
 
     def validate_username(self, value: str) -> str:
+        username = value.strip().upper()
+        if not re.match(r'^B\d{2}DCCN\d{3}$', username):
+            raise serializers.ValidationError('Mã sinh viên phải có định dạng: B20DCCN001.')
         if UserProfile.objects.filter(username=value).exists():
             raise serializers.ValidationError('Tên đăng nhập đã tồn tại.')
-        return value
+        return username
 
     def create(self, validated_data):
         max_user_id = UserProfile.objects.aggregate(Max('user_id')).get('user_id__max') or 0
@@ -326,4 +409,6 @@ class RegisterSerializer(serializers.Serializer):
             role='Sinh viên',
             is_active=True,
             phone_no=validated_data.get('phone_no') or None,
+            email=validated_data.get('email') or None,
+            created_at=timezone.now(),
         )

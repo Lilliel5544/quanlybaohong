@@ -6,26 +6,35 @@ import { Badge } from './ui/badge';
 import { Separator } from './ui/separator';
 import { User, Mail, Shield, Calendar, LogOut, CheckCircle, XCircle, FileText, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
-import { getCurrentUser, logout } from '../data/authData';
+import { fetchCurrentUser, getCurrentUser, logout } from '../data/authData';
 import { mockIssues } from '../data/mockData';
 
 export default function Profile() {
   const navigate = useNavigate();
   const [user, setUser] = useState(getCurrentUser());
+  const [issues, setIssues] = useState(mockIssues);
 
   useEffect(() => {
-    if (!user) {
-      toast.error('Vui lòng đăng nhập để truy cập trang này');
-      navigate('/login');
-    }
+    const loadUser = async () => {
+      const resolvedUser = user || await fetchCurrentUser();
+      if (!resolvedUser) {
+        toast.error('Vui lòng đăng nhập để truy cập trang này');
+        navigate('/login');
+        return;
+      }
+      setUser(resolvedUser);
+      setIssues([...mockIssues]);
+    };
+
+    loadUser();
   }, [user, navigate]);
 
   if (!user) {
     return null;
   }
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     toast.success('Đã đăng xuất thành công');
     navigate('/');
   };
@@ -42,7 +51,7 @@ export default function Profile() {
   const roleConfig = getRoleBadge(user.role);
 
   // Get user's reported issues
-  const userIssues = mockIssues.filter(issue => issue.reporterCode === user.username);
+  const userIssues = issues.filter(issue => issue.reporterCode === user.username);
 
   const getStatusBadge = (status: string) => {
     const colors: Record<string, string> = {

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, Link, useLocation } from 'react-router';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -11,14 +11,16 @@ import { login } from '../data/authData';
 
 export default function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const prefillUsername = (location.state as { username?: string } | null)?.username || '';
   const [formData, setFormData] = useState({
-    username: '',
+    username: prefillUsername,
     password: '',
   });
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     
@@ -29,19 +31,18 @@ export default function Login() {
 
     setIsLoading(true);
 
-    // Simulate API call
-    setTimeout(() => {
-      const user = login(formData.username, formData.password);
-      
-      if (user) {
-        toast.success(`Chào mừng ${user.fullName}!`);
-        navigate('/profile');
-      } else {
-        setError('Tên đăng nhập hoặc mật khẩu không đúng, hoặc tài khoản đã bị khóa');
-      }
-      
+    try {
+      const user = await login(formData.username, formData.password);
+      toast.success(`Chào mừng ${user.fullName}!`);
+      navigate('/profile');
+    } catch (err) {
+      const message = err instanceof Error
+        ? err.message
+        : 'Tên đăng nhập hoặc mật khẩu không đúng, hoặc tài khoản đã bị khóa';
+      setError(message);
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   return (
@@ -106,13 +107,18 @@ export default function Login() {
                 {isLoading ? 'Đang đăng nhập...' : 'Đăng nhập'}
               </Button>
 
+              <div className="text-center text-sm text-gray-600">
+                Chưa có tài khoản?{' '}
+                <Link to="/register" className="text-blue-600 hover:underline font-semibold">
+                  Đăng ký ngay
+                </Link>
+              </div>
+
               <div className="mt-4 p-4 bg-gray-50 rounded-lg">
                 <p className="text-sm font-semibold text-gray-700 mb-2">Tài khoản demo:</p>
                 <div className="space-y-1 text-xs text-gray-600">
                   <p><strong>Admin:</strong> admin / password123</p>
-                  <p><strong>Kỹ thuật viên:</strong> ktv001 / password123</p>
                   <p><strong>Sinh viên:</strong> B20DCCN001 / password123</p>
-                  <p><strong>Giảng viên:</strong> GV001 / password123</p>
                 </div>
               </div>
             </form>

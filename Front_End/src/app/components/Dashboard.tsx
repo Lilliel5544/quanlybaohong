@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router';
 import { AlertCircle, CheckCircle, Clock, TrendingUp, FileText, Wrench } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
@@ -6,8 +7,14 @@ import { Badge } from './ui/badge';
 import { getIssueStats, mockIssues } from '../data/mockData';
 
 export default function Dashboard() {
+  const [issues, setIssues] = useState(mockIssues);
   const stats = getIssueStats();
-  const recentIssues = mockIssues.slice(0, 5);
+  const recentIssues = issues.slice(0, 5);
+
+  // Refresh issues when component mounts
+  useEffect(() => {
+    setIssues([...mockIssues]);
+  }, []);
 
   const statCards = [
     {

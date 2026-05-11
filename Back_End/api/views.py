@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 from django.db import transaction
+from django.db.models import Max
 from django.middleware.csrf import get_token
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -23,6 +24,10 @@ def is_admin(user: UserProfile | None) -> bool:
 	return bool(user and user.role == 'Admin')
 
 
+def is_staff_user(user: UserProfile | None) -> bool:
+	return bool(user and user.role in {'Admin', 'Kỹ thuật viên'})
+
+
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def csrf(request):
@@ -41,6 +46,9 @@ def login(request):
 	user = UserProfile.objects.filter(username=username, password=password, is_active=True).first()
 	if not user:
 		return Response({'detail': 'Tên đăng nhập hoặc mật khẩu không đúng.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+	user.last_login = timezone.now()
+	user.save(update_fields=['last_login'])
 
 	request.session['user_id'] = user.id
 	request.session.modified = True
@@ -243,10 +251,16 @@ def mark_all_notifications_read(request):
 @permission_classes([AllowAny])
 def update_issue_status(request, pk: int):
 	user = get_session_user(request)
-	if not is_admin(user):
+	if not is_staff_user(user):
 		return Response({'detail': 'Không có quyền.'}, status=status.HTTP_403_FORBIDDEN)
 
-	status_input = request.data.get('status', '').strip()
+	status_raw = request.data.get('status', None)
+	priority_raw = request.data.get('priority', None)
+	assigned_to_raw = request.data.get('assignedTo', None)
+
+	status_input = status_raw.strip() if isinstance(status_raw, str) else ''
+	priority_input = priority_raw.strip() if isinstance(priority_raw, str) else ''
+	assigned_to_input = assigned_to_raw.strip() if isinstance(assigned_to_raw, str) else ''
 	note = request.data.get('note', '').strip()
 
 	status_map = {
@@ -262,31 +276,71 @@ def update_issue_status(request, pk: int):
 		'rejected': 'Không thể sửa',
 	}
 
-	if status_input not in status_map:
+	if status_raw is not None and status_input not in status_map:
 		return Response({'detail': 'Trạng thái không hợp lệ.'}, status=status.HTTP_400_BAD_REQUEST)
+
+	priority_map = {
+		'low': 'Thấp',
+		'medium': 'Trung bình',
+		'high': 'Cao',
+		'urgent': 'Khẩn cấp',
+	}
+	if priority_raw is not None and priority_input not in priority_map:
+		return Response({'detail': 'Mức độ ưu tiên không hợp lệ.'}, status=status.HTTP_400_BAD_REQUEST)
 
 	try:
 		ticket = MaintenanceTicket.objects.get(id=pk)
 	except MaintenanceTicket.DoesNotExist:
 		return Response({'detail': 'Không tìm thấy sự cố.'}, status=status.HTTP_404_NOT_FOUND)
 
-	ticket.status = status_map[status_input]
-	ticket.save(update_fields=['status'])
+	updated_fields = []
+	if status_raw is not None:
+		ticket.status = status_map[status_input]
+		updated_fields.append('status')
+	if priority_raw is not None:
+		ticket.priority = priority_map[priority_input]
+		updated_fields.append('priority')
+	if assigned_to_raw is not None and assigned_to_input:
+		technician = UserProfile.objects.filter(
+			full_name__iexact=assigned_to_input,
+			role='Kỹ thuật viên',
+			is_active=True,
+		).first()
+		ticket.technician = technician
+		updated_fields.append('technician')
+	elif assigned_to_raw is not None and assigned_to_input == '':
+		ticket.technician = None
+		updated_fields.append('technician')
 
-	performer = user.full_name if user and user.full_name else 'Quản trị viên'
-	status_note = note or history_map[status_input]
-	stored_note = f"[By] {performer}\n{status_note}"
+	if updated_fields:
+		ticket.save(update_fields=updated_fields)
 
-	EquipmentStatusHistory.objects.create(
-		ticket=ticket,
-		status=history_map[status_input],
-		note=stored_note,
-		changed_at=timezone.now(),
-	)
+	if status_raw is not None or note or assigned_to_raw is not None:
+		performer = user.full_name if user and user.full_name else 'Quản trị viên'
+		current_status = status_map.get(status_input) if status_raw is not None else ticket.status
+		history_status_by_ticket = {
+			'Chờ tiếp nhận': 'Chờ tiếp nhận',
+			'Đang xử lý': 'Đang sửa',
+			'Đã sửa xong': 'Đã sửa xong',
+			'Từ chối': 'Không thể sửa',
+		}
+		history_status = history_map.get(status_input) or history_status_by_ticket.get(
+			current_status,
+			'Đang sửa',
+		)
+		status_note = note or history_status
+		stored_note = f"[By] {performer}\n{status_note}"
 
-	if ticket.reporter_id:
-		status_label = status_map[status_input]
-		note_text = note or history_map[status_input]
+		EquipmentStatusHistory.objects.create(
+			ticket=ticket,
+			status=history_status,
+			note=stored_note,
+			changed_at=timezone.now(),
+		)
+
+	if ticket.reporter_id and (status_input or note):
+		status_label = status_map.get(status_input, ticket.status)
+		note_text = note or history_map.get(status_input, '')
 		message_lines = [f"Trạng thái mới: {status_label}"]
 		if note_text:
 			message_lines.append(f"Ghi chú: {note_text}")
@@ -336,18 +390,13 @@ class IssueViewSet(viewsets.ModelViewSet):
 	def get_queryset(self):
 		queryset = super().get_queryset()
 		user = get_session_user(self.request)
-		if not user:
-			return queryset.none()
-
 		status_param = (self.request.query_params.get('status') or '').strip()
 		if status_param:
 			status_label = STATUS_REVERSE_MAP.get(status_param)
 			if status_label:
 				queryset = queryset.filter(status=status_label)
 
-		if is_admin(user):
-			return queryset
-		return queryset.filter(reporter_id=user.id)
+		return queryset
 
 	def get_serializer_class(self):
 		if self.action == 'create':
@@ -357,9 +406,29 @@ class IssueViewSet(viewsets.ModelViewSet):
 	def create(self, request, *args, **kwargs):
 		user = get_session_user(request)
 		if not user:
-			return Response({'detail': 'Chưa đăng nhập.'}, status=status.HTTP_401_UNAUTHORIZED)
+			reporter_code = (request.data.get('reporterCode') or '').strip()
+			reporter_name = (request.data.get('reportedBy') or '').strip()
+			if not reporter_code or not reporter_name:
+				return Response({'detail': 'Chưa đăng nhập.'}, status=status.HTTP_401_UNAUTHORIZED)
 
-		serializer = self.get_serializer(data=request.data)
+			user = UserProfile.objects.filter(username__iexact=reporter_code).first()
+			if user and not user.is_active:
+				return Response({'detail': 'Tài khoản đã bị khóa.'}, status=status.HTTP_403_FORBIDDEN)
+
+			if not user:
+				max_user_id = UserProfile.objects.aggregate(Max('user_id')).get('user_id__max') or 0
+				user = UserProfile.objects.create(
+					user_id=max_user_id + 1,
+					username=reporter_code,
+					password='password123',
+					full_name=reporter_name,
+					role='Sinh viên',
+					is_active=True,
+					email=request.data.get('email') or None,
+					created_at=timezone.now(),
+				)
+
+		serializer = self.get_serializer(data=request.data, context={'reporter': user})
 		serializer.is_valid(raise_exception=True)
 		validated = serializer.validated_data
 		now = timezone.now()
@@ -398,7 +467,6 @@ class IssueViewSet(viewsets.ModelViewSet):
 			payload = IssueSerializer(existing_ticket).data
 			return Response({'duplicate': True, 'issue': payload}, status=status.HTTP_200_OK)
 
-		request.user_profile = user
 		ticket = serializer.save()
 		IssueReport.objects.create(ticket=ticket, reporter=user)
 		payload = IssueSerializer(ticket).data

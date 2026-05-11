@@ -17,6 +17,9 @@ class UserProfile(models.Model):
 	role = models.CharField(max_length=20, choices=ROLE_CHOICES)
 	is_active = models.BooleanField(default=True)
 	phone_no = models.CharField(max_length=15, null=True, blank=True)
+	email = models.CharField(max_length=100, null=True, blank=True)
+	created_at = models.DateTimeField(null=True, blank=True)
+	last_login = models.DateTimeField(null=True, blank=True)
 
 	class Meta:
 		managed = False

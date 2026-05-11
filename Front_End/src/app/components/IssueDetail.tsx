@@ -1,23 +1,51 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router';
-import { ArrowLeft, Calendar, User, MapPin, Tag, AlertCircle, CheckCircle2, Star, Clock, Play, Pause, Wrench, Hammer } from 'lucide-react';
+import { ArrowLeft, Calendar, User, MapPin, Tag, AlertCircle, CheckCircle2, Star, Clock, Play, Pause, Wrench, Hammer, Edit } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
+import { Label } from './ui/label';
 import { Separator } from './ui/separator';
 import { Textarea } from './ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { toast } from 'sonner';
-import { getIssueById, equipmentPerRoom } from '../data/mockData';
+import { getIssueById, updateIssue, equipmentPerRoom, getEquipmentForRoom } from '../data/mockData';
+import { getCurrentUser } from '../data/authData';
 
 export default function IssueDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const issue = getIssueById(id || '');
-  
+  const currentUser = getCurrentUser();
+
+  // Use state to track issue data for re-rendering
+  const [issueData, setIssueData] = useState(getIssueById(id || ''));
+  const issue = issueData;
+
   const [rating, setRating] = useState(issue?.rating || 0);
   const [hoveredRating, setHoveredRating] = useState(0);
   const [feedback, setFeedback] = useState(issue?.feedback || '');
   const [hasSubmitted, setHasSubmitted] = useState(!!(issue?.rating || issue?.feedback));
+
+  // Admin/Technician edit state
+  const [isEditing, setIsEditing] = useState(false);
+  const [editData, setEditData] = useState({
+    status: issue?.status || 'pending',
+    priority: issue?.priority || 'medium',
+    assignedTo: issue?.assignedTo || 'unassigned',
+    notes: '',
+  });
+
+  // Update editData when issue changes
+  useEffect(() => {
+    if (issue && !isEditing) {
+      setEditData({
+        status: issue.status,
+        priority: issue.priority,
+        assignedTo: issue.assignedTo || 'unassigned',
+        notes: '',
+      });
+    }
+  }, [issue, isEditing]);
 
   if (!issue) {
     return (
@@ -36,10 +64,38 @@ export default function IssueDetail() {
       toast.error('Vui lòng chọn số sao đánh giá');
       return;
     }
-    
+
     // In a real app, this would send to backend
     toast.success('Đã gửi đánh giá thành công!');
     setHasSubmitted(true);
+  };
+
+  const handleUpdateIssue = () => {
+    if (!id) return;
+
+    // Update the issue in mockData
+    const updatedIssue = updateIssue(id, {
+      status: editData.status as any,
+      priority: editData.priority as any,
+      assignedTo: editData.assignedTo === 'unassigned' ? '' : editData.assignedTo,
+      notes: editData.notes,
+      performer: currentUser?.fullName || 'Quản trị viên',
+    });
+
+    if (updatedIssue) {
+      // Update local state to trigger re-render
+      setIssueData(updatedIssue);
+      toast.success('Đã cập nhật trạng thái sự cố thành công!');
+      setIsEditing(false);
+
+      // Reset notes
+      setEditData({
+        ...editData,
+        notes: '',
+      });
+    } else {
+      toast.error('Không thể cập nhật sự cố');
+    }
   };
 
   const getPriorityBadge = (priority: string) => {
@@ -113,6 +169,13 @@ export default function IssueDetail() {
     return equipment?.name || equipmentId;
   };
 
+  const getEquipmentQuantity = (equipmentId: string) => {
+    if (!issue?.building || !issue?.room) return null;
+    const roomEquipment = getEquipmentForRoom(issue.building, issue.room);
+    const equipment = roomEquipment.find(e => e.id === equipmentId);
+    return equipment?.quantity || 0;
+  };
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       {/* Back Button */}
@@ -131,6 +194,156 @@ export default function IssueDetail() {
           {getStatusText(issue.status)}
         </Badge>
       </div>
+
+      {/* Admin/Technician Edit Section */}
+      {currentUser && (currentUser.role === 'admin' || currentUser.role === 'technician') && (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Edit className="w-5 h-5" />
+                Quản lý sự cố
+              </CardTitle>
+              {!isEditing && (
+                <Button onClick={() => setIsEditing(true)} size="sm">
+                  <Edit className="w-4 h-4 mr-2" />
+                  Chỉnh sửa
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            {isEditing ? (
+              <div className="space-y-6 bg-white rounded-lg p-6">
+                <div className="space-y-4">
+                  {/* Status */}
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-status">
+                      Trạng thái <span className="text-red-500">*</span>
+                    </Label>
+                    <Select
+                      value={editData.status}
+                      onValueChange={(value) => setEditData({ ...editData, status: value as any })}
+                    >
+                      <SelectTrigger id="edit-status">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pending">Chờ xử lý</SelectItem>
+                        <SelectItem value="in-progress">Đang xử lý</SelectItem>
+                        <SelectItem value="resolved">Đã xử lý</SelectItem>
+                        <SelectItem value="rejected">Từ chối</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Priority */}
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-priority">
+                      Mức độ ưu tiên <span className="text-red-500">*</span>
+                    </Label>
+                    <Select
+                      value={editData.priority}
+                      onValueChange={(value) => setEditData({ ...editData, priority: value as any })}
+                    >
+                      <SelectTrigger id="edit-priority">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="low">Thấp</SelectItem>
+                        <SelectItem value="medium">Trung bình</SelectItem>
+                        <SelectItem value="high">Cao</SelectItem>
+                        <SelectItem value="urgent">Khẩn cấp</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Assigned To */}
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-assignedTo">Người phụ trách</Label>
+                    <Select
+                      value={editData.assignedTo || 'unassigned'}
+                      onValueChange={(value) => setEditData({ ...editData, assignedTo: value === 'unassigned' ? '' : value })}
+                    >
+                      <SelectTrigger id="edit-assignedTo">
+                        <SelectValue placeholder="Chọn kỹ thuật viên" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unassigned">Chưa phân công</SelectItem>
+                        <SelectItem value="Trần Văn B">Trần Văn B</SelectItem>
+                        <SelectItem value="Lê Văn G">Lê Văn G</SelectItem>
+                        <SelectItem value="Nguyễn Văn E">Nguyễn Văn E</SelectItem>
+                        <SelectItem value="Trần Văn K">Trần Văn K</SelectItem>
+                        <SelectItem value="Phạm Văn M">Phạm Văn M</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Notes */}
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-notes">Ghi chú cập nhật</Label>
+                    <Textarea
+                      id="edit-notes"
+                      placeholder="Nhập ghi chú về quá trình xử lý, lý do thay đổi trạng thái..."
+                      value={editData.notes}
+                      onChange={(e) => setEditData({ ...editData, notes: e.target.value })}
+                      rows={4}
+                    />
+                    <p className="text-xs text-gray-500">
+                      Ghi chú này sẽ được thêm vào lịch sử xử lý và gửi thông báo cho người báo cáo
+                    </p>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-4 pt-4">
+                  <Button onClick={handleUpdateIssue} className="flex-1">
+                    Lưu thay đổi
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setIsEditing(false);
+                      if (issue) {
+                        setEditData({
+                          status: issue.status,
+                          priority: issue.priority,
+                          assignedTo: issue.assignedTo || 'unassigned',
+                          notes: '',
+                        });
+                      }
+                    }}
+                    className="flex-1"
+                  >
+                    Hủy
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <p className="text-sm text-gray-600 mb-1">Trạng thái hiện tại</p>
+                  <Badge className={`${getStatusBadge(issue.status)}`}>
+                    {getStatusText(issue.status)}
+                  </Badge>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600 mb-1">Mức độ ưu tiên</p>
+                  <Badge variant={getPriorityBadge(issue.priority)}>
+                    {getPriorityText(issue.priority)}
+                  </Badge>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600 mb-1">Người phụ trách</p>
+                  <p className="font-semibold text-gray-900">
+                    {issue.assignedTo || 'Chưa phân công'}
+                  </p>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Main Info Card */}
       <Card>
@@ -172,14 +385,22 @@ export default function IssueDetail() {
               {issue.damagedEquipment && issue.damagedEquipment.length > 0 && (
                 <div className="flex items-start gap-3">
                   <Hammer className="w-5 h-5 text-gray-400 mt-0.5" />
-                  <div>
-                    <p className="text-sm text-gray-500">Thiết bị bị hỏng</p>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {issue.damagedEquipment.map((equipId) => (
-                        <Badge key={equipId} variant="outline" className="text-xs">
-                          {getEquipmentName(equipId)}
-                        </Badge>
-                      ))}
+                  <div className="flex-1">
+                    <p className="text-sm text-gray-500 mb-2">Thiết bị bị hỏng</p>
+                    <div className="space-y-1">
+                      {issue.damagedEquipment.map((item) => {
+                        const totalQuantity = getEquipmentQuantity(item.equipmentId);
+                        return (
+                          <div key={item.equipmentId} className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-xs">
+                              {getEquipmentName(item.equipmentId)}
+                            </Badge>
+                            <Badge variant="destructive" className="text-xs">
+                              {item.quantity}/{totalQuantity}
+                            </Badge>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>

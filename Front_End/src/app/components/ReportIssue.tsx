@@ -2,13 +2,14 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Button } from './ui/button';
+import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Checkbox } from './ui/checkbox';
 import { toast } from 'sonner';
-import { facilities, buildings, getRoomsForFloor, getEquipmentForRoom } from '../data/mockData';
+import { facilities, buildings, getRoomsForFloor, getEquipmentForRoom, addIssue } from '../data/mockData';
 
 export default function ReportIssue() {
   const navigate = useNavigate();
@@ -22,7 +23,7 @@ export default function ReportIssue() {
     building: preFilledData?.building || '',
     floor: preFilledData?.floor || '',
     room: preFilledData?.room || '',
-    damagedEquipment: [] as string[],
+    damagedEquipment: [] as { equipmentId: string; quantity: number }[],
     priority: 'medium',
     reportedBy: '',
     reporterCode: '',
@@ -54,8 +55,21 @@ export default function ReportIssue() {
       return;
     }
 
-    // In a real app, this would send data to backend
-    toast.success('Đã gửi báo cáo sự cố thành công!');
+    // Add issue to mockData
+    const newIssue = addIssue({
+      title: formData.title,
+      description: formData.description,
+      facility: formData.facility,
+      building: formData.building,
+      floor: formData.floor,
+      room: formData.room,
+      damagedEquipment: formData.damagedEquipment,
+      priority: formData.priority as 'low' | 'medium' | 'high' | 'urgent',
+      reportedBy: formData.reportedBy,
+      reporterCode: formData.reporterCode,
+    });
+
+    toast.success(`Đã gửi báo cáo sự cố thành công! Mã sự cố: #${newIssue.id}`);
 
     // Reset form
     setFormData({
@@ -71,9 +85,9 @@ export default function ReportIssue() {
       reporterCode: '',
     });
 
-    // Navigate to issues list after 1 second
+    // Navigate to dashboard after 1 second to see the new issue
     setTimeout(() => {
-      navigate('/issues');
+      navigate('/');
     }, 1000);
   };
 
@@ -114,35 +128,79 @@ export default function ReportIssue() {
               <Label>
                 Thiết bị bị hỏng <span className="text-red-500">*</span>
               </Label>
-              <div className="border rounded-lg p-4 space-y-3 bg-gray-50 max-h-64 overflow-y-auto">
+              <div className="border rounded-lg p-4 space-y-3 bg-gray-50 max-h-96 overflow-y-auto">
                 {availableEquipment.length > 0 ? (
-                  availableEquipment.map((equipment) => (
-                    <div key={equipment.id} className="flex items-center space-x-3">
-                      <Checkbox
-                        id={equipment.id}
-                        checked={formData.damagedEquipment.includes(equipment.id)}
-                        onCheckedChange={(checked) => {
-                          if (checked) {
-                            setFormData({
-                              ...formData,
-                              damagedEquipment: [...formData.damagedEquipment, equipment.id]
-                            });
-                          } else {
-                            setFormData({
-                              ...formData,
-                              damagedEquipment: formData.damagedEquipment.filter(id => id !== equipment.id)
-                            });
-                          }
-                        }}
-                      />
-                      <Label
-                        htmlFor={equipment.id}
-                        className="text-sm font-normal cursor-pointer flex-1"
-                      >
-                        {equipment.name} (x{equipment.quantity})
-                      </Label>
-                    </div>
-                  ))
+                  availableEquipment.map((equipment) => {
+                    const damagedItem = formData.damagedEquipment.find(d => d.equipmentId === equipment.id);
+                    const isChecked = !!damagedItem;
+                    const quantity = damagedItem?.quantity || 1;
+
+                    return (
+                      <div key={equipment.id} className="space-y-2">
+                        <div className="flex items-center space-x-3">
+                          <Checkbox
+                            id={equipment.id}
+                            checked={isChecked}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setFormData({
+                                  ...formData,
+                                  damagedEquipment: [
+                                    ...formData.damagedEquipment,
+                                    { equipmentId: equipment.id, quantity: 1 }
+                                  ]
+                                });
+                              } else {
+                                setFormData({
+                                  ...formData,
+                                  damagedEquipment: formData.damagedEquipment.filter(
+                                    d => d.equipmentId !== equipment.id
+                                  )
+                                });
+                              }
+                            }}
+                          />
+                          <Label
+                            htmlFor={equipment.id}
+                            className="text-sm font-normal cursor-pointer flex-1"
+                          >
+                            {equipment.name} (Có {equipment.quantity} thiết bị)
+                          </Label>
+                        </div>
+
+                        {isChecked && (
+                          <div className="ml-8 flex items-center gap-3">
+                            <Label className="text-xs text-gray-600">Số lượng hỏng:</Label>
+                            <Input
+                              type="number"
+                              min="1"
+                              max={equipment.quantity}
+                              value={quantity}
+                              onChange={(e) => {
+                                const newQuantity = parseInt(e.target.value) || 1;
+                                const clampedQuantity = Math.min(Math.max(1, newQuantity), equipment.quantity);
+                                setFormData({
+                                  ...formData,
+                                  damagedEquipment: formData.damagedEquipment.map(d =>
+                                    d.equipmentId === equipment.id
+                                      ? { ...d, quantity: clampedQuantity }
+                                      : d
+                                  )
+                                });
+                              }}
+                              className="w-20 h-8"
+                            />
+                            <span className="text-xs text-gray-600">
+                              / {equipment.quantity}
+                            </span>
+                            <Badge variant="secondary" className="text-xs">
+                              {quantity}/{equipment.quantity}
+                            </Badge>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
                 ) : (
                   <p className="text-sm text-gray-500 text-center py-4">
                     Vui lòng chọn tòa nhà và phòng học để xem danh sách thiết bị

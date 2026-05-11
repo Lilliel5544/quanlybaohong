@@ -1,3 +1,8 @@
+export interface DamagedEquipmentItem {
+  equipmentId: string;
+  quantity: number;
+}
+
 export interface Issue {
   id: string;
   title: string;
@@ -6,7 +11,7 @@ export interface Issue {
   building?: string;
   floor?: string;
   room: string;
-  damagedEquipment: string[];
+  damagedEquipment: DamagedEquipmentItem[];
   status: 'pending' | 'in-progress' | 'resolved' | 'rejected';
   priority: 'low' | 'medium' | 'high' | 'urgent';
   reportedBy: string;
@@ -129,7 +134,7 @@ export const mockIssues: Issue[] = [
     building: 'A2',
     floor: '3',
     room: '301',
-    damagedEquipment: ['projector'],
+    damagedEquipment: [{ equipmentId: 'projector', quantity: 1 }],
     status: 'in-progress',
     priority: 'high',
     reportedBy: 'Nguyễn Văn A',
@@ -170,12 +175,12 @@ export const mockIssues: Issue[] = [
   {
     id: '2',
     title: 'Bàn sinh viên bị gãy chân',
-    description: 'Bàn số 15 tại phòng 205 bị gãy chân bên phải, cần sửa chữa hoặc thay thế',
+    description: '2 bàn tại phòng 205 bị gãy chân, cần sửa chữa hoặc thay thế',
     facility: 'Cơ sở Hà Nội',
     building: 'A3',
     floor: '2',
     room: '205',
-    damagedEquipment: ['desk'],
+    damagedEquipment: [{ equipmentId: 'desk', quantity: 2 }],
     status: 'pending',
     priority: 'medium',
     reportedBy: 'Lê Thị C',
@@ -185,12 +190,12 @@ export const mockIssues: Issue[] = [
   {
     id: '3',
     title: 'Đèn huỳnh quang chập chờn',
-    description: 'Một số bóng đèn trong phòng 102 bị chập chờn, ảnh hưởng đến học tập',
+    description: '3 bóng đèn trong phòng 102 bị chập chờn, ảnh hưởng đến học tập',
     facility: 'Cơ sở Hà Nội',
     building: 'A2',
     floor: '1',
     room: '102',
-    damagedEquipment: ['light'],
+    damagedEquipment: [{ equipmentId: 'light', quantity: 3 }],
     status: 'resolved',
     priority: 'low',
     reportedBy: 'Phạm Văn D',
@@ -242,12 +247,12 @@ export const mockIssues: Issue[] = [
   {
     id: '4',
     title: 'Máy lạnh không làm lạnh',
-    description: 'Máy lạnh tại phòng 401 chạy nhưng không làm lạnh, phòng học rất nóng',
+    description: '2 máy lạnh tại phòng 401 chạy nhưng không làm lạnh, phòng học rất nóng',
     facility: 'Cơ sở Hà Nội',
     building: 'A3',
     floor: '4',
     room: '401',
-    damagedEquipment: ['ac'],
+    damagedEquipment: [{ equipmentId: 'ac', quantity: 2 }],
     status: 'in-progress',
     priority: 'urgent',
     reportedBy: 'Hoàng Thị F',
@@ -293,7 +298,7 @@ export const mockIssues: Issue[] = [
     building: 'A2',
     floor: '2',
     room: '201',
-    damagedEquipment: ['board'],
+    damagedEquipment: [{ equipmentId: 'board', quantity: 1 }],
     status: 'pending',
     priority: 'low',
     reportedBy: 'Đặng Văn H',
@@ -304,12 +309,12 @@ export const mockIssues: Issue[] = [
   {
     id: '6',
     title: 'Quạt trần không quay',
-    description: 'Quạt trần thứ 2 tại phòng 105 bị kẹt, không quay được',
+    description: '1 quạt trần tại phòng 105 bị kẹt, không quay được',
     facility: 'Cơ sở Hồ Chí Minh',
     building: 'A3',
     floor: '1',
     room: '105',
-    damagedEquipment: ['fan'],
+    damagedEquipment: [{ equipmentId: 'fan', quantity: 1 }],
     status: 'resolved',
     priority: 'medium',
     reportedBy: 'Vũ Thị I',
@@ -375,12 +380,16 @@ export const mockIssues: Issue[] = [
   {
     id: '7',
     title: 'Nhiều thiết bị hỏng cùng lúc',
-    description: 'Phòng 506 có nhiều thiết bị hỏng: đèn chập chờn, máy chiếu không bật, và 1 bàn bị gãy',
+    description: 'Phòng 506 có nhiều thiết bị hỏng: 4 đèn chập chờn, máy chiếu không bật, và 3 bàn bị gãy',
     facility: 'Cơ sở Hà Nội',
     building: 'A2',
     floor: '5',
     room: '506',
-    damagedEquipment: ['light', 'projector', 'desk'],
+    damagedEquipment: [
+      { equipmentId: 'light', quantity: 4 },
+      { equipmentId: 'projector', quantity: 1 },
+      { equipmentId: 'desk', quantity: 3 }
+    ],
     status: 'in-progress',
     priority: 'urgent',
     reportedBy: 'Ngô Văn L',
@@ -414,12 +423,12 @@ export const mockIssues: Issue[] = [
   {
     id: '8',
     title: 'Ghế giảng viên bị hỏng tay vịn',
-    description: 'Ghế giảng viên tại phòng 303 bị gãy tay vịn bên trái',
+    description: '1 ghế giảng viên tại phòng 303 bị gãy tay vịn bên trái',
     facility: 'Cơ sở Hồ Chí Minh',
     building: 'A3',
     floor: '3',
     room: '303',
-    damagedEquipment: ['desk'],
+    damagedEquipment: [{ equipmentId: 'desk', quantity: 1 }],
     status: 'pending',
     priority: 'low',
     reportedBy: 'Bùi Thị N',
@@ -432,12 +441,79 @@ export const getIssueById = (id: string): Issue | undefined => {
   return mockIssues.find(issue => issue.id === id);
 };
 
+export const addIssue = (newIssue: Omit<Issue, 'id' | 'reportedAt' | 'status' | 'timeline'>): Issue => {
+  const id = (mockIssues.length + 1).toString();
+  const issue: Issue = {
+    ...newIssue,
+    id,
+    reportedAt: new Date().toISOString(),
+    status: 'pending',
+    timeline: [
+      {
+        id: `t${id}-1`,
+        status: 'reported',
+        description: 'Đã báo cáo',
+        timestamp: new Date().toISOString(),
+        performer: newIssue.reportedBy,
+      }
+    ],
+  };
+
+  mockIssues.unshift(issue); // Add to beginning of array
+  return issue;
+};
+
+export const updateIssue = (
+  id: string,
+  updates: {
+    status?: Issue['status'];
+    priority?: Issue['priority'];
+    assignedTo?: string;
+    notes?: string;
+    performer?: string;
+  }
+): Issue | undefined => {
+  const issueIndex = mockIssues.findIndex(issue => issue.id === id);
+  if (issueIndex === -1) return undefined;
+
+  const issue = mockIssues[issueIndex];
+
+  // Update basic fields
+  if (updates.status) issue.status = updates.status;
+  if (updates.priority) issue.priority = updates.priority;
+  if (updates.assignedTo !== undefined) issue.assignedTo = updates.assignedTo || undefined;
+
+  // Add to timeline if there's a status change or notes
+  if (updates.status || updates.notes) {
+    if (!issue.timeline) {
+      issue.timeline = [];
+    }
+
+    const newEvent: TimelineEvent = {
+      id: `t${id}-${issue.timeline.length + 1}`,
+      status: updates.status || issue.status,
+      description: updates.notes || `Cập nhật trạng thái: ${updates.status}`,
+      timestamp: new Date().toISOString(),
+      performer: updates.performer || 'Quản trị viên',
+    };
+
+    issue.timeline.push(newEvent);
+  }
+
+  // Update resolved time if status is resolved
+  if (updates.status === 'resolved' && !issue.resolvedAt) {
+    issue.resolvedAt = new Date().toISOString();
+  }
+
+  return issue;
+};
+
 export const getIssueStats = () => {
   const total = mockIssues.length;
   const pending = mockIssues.filter(i => i.status === 'pending').length;
   const inProgress = mockIssues.filter(i => i.status === 'in-progress').length;
   const resolved = mockIssues.filter(i => i.status === 'resolved').length;
   const urgent = mockIssues.filter(i => i.priority === 'urgent').length;
-  
+
   return { total, pending, inProgress, resolved, urgent };
 };

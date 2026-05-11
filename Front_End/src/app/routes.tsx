@@ -7,6 +7,7 @@ import IssueList from "./components/IssueList";
 import IssueDetail from "./components/IssueDetail";
 import Notifications from "./components/Notifications";
 import Login from "./components/Login";
+import Register from "./components/Register";
 import Profile from "./components/Profile";
 import NotFound from "./components/NotFound";
 
@@ -22,6 +23,7 @@ export const router = createBrowserRouter([
       { path: "issues/:id", Component: IssueDetail },
       { path: "notifications", Component: Notifications },
       { path: "login", Component: Login },
+      { path: "register", Component: Register },
       { path: "profile", Component: Profile },
       { path: "*", Component: NotFound },
     ],

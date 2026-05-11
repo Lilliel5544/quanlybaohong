@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router';
 import { Bell, AlertTriangle, CheckCircle2, Clock, Wrench, Info } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
@@ -8,11 +9,17 @@ import { getCurrentUser } from '../data/authData';
 
 export default function Notifications() {
   const currentUser = getCurrentUser();
+  const [issues, setIssues] = useState(mockIssues);
+
+  // Refresh issues when component mounts
+  useEffect(() => {
+    setIssues([...mockIssues]);
+  }, []);
 
   // Admin notifications
-  const duplicateIssues = mockIssues.filter(issue => issue.isDuplicate);
-  const pendingIssues = mockIssues.filter(issue => issue.status === 'pending' && !issue.isDuplicate);
-  const urgentIssues = mockIssues.filter(issue => issue.priority === 'urgent');
+  const duplicateIssues = issues.filter(issue => issue.isDuplicate);
+  const pendingIssues = issues.filter(issue => issue.status === 'pending' && !issue.isDuplicate);
+  const urgentIssues = issues.filter(issue => issue.priority === 'urgent');
 
   const adminNotifications = [
     ...duplicateIssues.map(issue => ({
@@ -45,7 +52,7 @@ export default function Notifications() {
   ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
   // User notifications - updates on their reported issues
-  const userIssues = mockIssues.filter(issue => issue.reporterCode === currentUser?.username);
+  const userIssues = issues.filter(issue => issue.reporterCode === currentUser?.username);
   const userNotifications = userIssues
     .filter(issue => issue.timeline && issue.timeline.length > 1) // Has updates
     .map(issue => {

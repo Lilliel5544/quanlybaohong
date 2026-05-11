@@ -1,6 +1,6 @@
 import { Outlet, Link, useLocation } from 'react-router';
 import { Home, QrCode, FileText, List, Menu, User, LogIn, Bell } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Sheet, SheetContent, SheetTrigger } from './ui/sheet';
@@ -12,6 +12,7 @@ export default function Root() {
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const currentUser = getCurrentUser();
+  const [issues, setIssues] = useState(mockIssues);
 
   const navigation = [
     { name: 'Trang chủ', path: '/', icon: Home },
@@ -20,9 +21,14 @@ export default function Root() {
     { name: 'Danh sách sự cố', path: '/issues', icon: List },
   ];
 
+  // Refresh issues when location changes
+  useEffect(() => {
+    setIssues([...mockIssues]);
+  }, [location]);
+
   // Count notifications (duplicates + urgent issues)
-  const duplicateCount = mockIssues.filter(issue => issue.isDuplicate).length;
-  const urgentCount = mockIssues.filter(issue => issue.priority === 'urgent').length;
+  const duplicateCount = issues.filter(issue => issue.isDuplicate).length;
+  const urgentCount = issues.filter(issue => issue.priority === 'urgent').length;
   const notificationCount = duplicateCount + urgentCount;
 
   const NavLinks = ({ mobile = false }: { mobile?: boolean }) => (
@@ -89,7 +95,7 @@ export default function Root() {
                   )}
                   {currentUser.role === 'user' && (
                     <Badge variant="destructive" className="absolute -top-1 -right-1 px-1.5 py-0 h-5 min-w-5 text-xs">
-                      {mockIssues.filter(i => i.reporterCode === currentUser.username && i.timeline && i.timeline.length > 1).length}
+                      {issues.filter(i => i.reporterCode === currentUser.username && i.timeline && i.timeline.length > 1).length}
                     </Badge>
                   )}
                 </Link>
@@ -124,8 +130,8 @@ export default function Root() {
 
             {/* Mobile Menu */}
             <Sheet open={open} onOpenChange={setOpen}>
-              <SheetTrigger asChild className="md:hidden">
-                <Button variant="outline" size="icon">
+              <SheetTrigger asChild>
+                <Button variant="outline" size="icon" className="md:hidden">
                   <Menu className="w-5 h-5" />
                 </Button>
               </SheetTrigger>
@@ -153,7 +159,7 @@ export default function Root() {
                       )}
                       {currentUser.role === 'user' && (
                         <Badge variant="destructive" className="ml-auto">
-                          {mockIssues.filter(i => i.reporterCode === currentUser.username && i.timeline && i.timeline.length > 1).length}
+                          {issues.filter(i => i.reporterCode === currentUser.username && i.timeline && i.timeline.length > 1).length}
                         </Badge>
                       )}
                     </Link>

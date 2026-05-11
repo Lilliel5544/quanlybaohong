@@ -1,20 +1,26 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router';
 import { Search, Filter } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Input } from './ui/input';
 import { Badge } from './ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { mockIssues, facilities, equipmentPerRoom, buildings } from '../data/mockData';
+import { mockIssues, facilities, equipmentPerRoom, buildings, getEquipmentForRoom } from '../data/mockData';
 
 export default function IssueList() {
+  const [issues, setIssues] = useState(mockIssues);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [facilityFilter, setFacilityFilter] = useState('all');
   const [buildingFilter, setBuildingFilter] = useState('all');
 
+  // Refresh issues when component mounts
+  useEffect(() => {
+    setIssues([...mockIssues]);
+  }, []);
+
   const filteredIssues = useMemo(() => {
-    return mockIssues.filter((issue) => {
+    return issues.filter((issue) => {
       const matchesSearch =
         issue.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         issue.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -26,7 +32,7 @@ export default function IssueList() {
 
       return matchesSearch && matchesStatus && matchesFacility && matchesBuilding;
     });
-  }, [searchTerm, statusFilter, facilityFilter, buildingFilter]);
+  }, [issues, searchTerm, statusFilter, facilityFilter, buildingFilter]);
 
   const getPriorityBadge = (priority: string) => {
     const variants: Record<string, any> = {
@@ -71,6 +77,17 @@ export default function IssueList() {
   const getEquipmentName = (equipmentId: string) => {
     const equipment = equipmentPerRoom.find(e => e.id === equipmentId);
     return equipment?.name || equipmentId;
+  };
+
+  const getEquipmentDisplay = (item: { equipmentId: string; quantity: number }, building?: string, room?: string) => {
+    const name = getEquipmentName(item.equipmentId);
+    if (!building || !room) return name;
+
+    const roomEquipment = getEquipmentForRoom(building, room);
+    const equipment = roomEquipment.find(e => e.id === item.equipmentId);
+    const total = equipment?.quantity || 0;
+
+    return `${name} (${item.quantity}/${total})`;
   };
 
   return (
@@ -222,9 +239,9 @@ export default function IssueList() {
                         {issue.damagedEquipment && issue.damagedEquipment.length > 0 && (
                           <div className="mt-2 flex flex-wrap items-center gap-1">
                             <span className="text-xs text-gray-500 mr-1">Thiết bị:</span>
-                            {issue.damagedEquipment.map((equipId) => (
-                              <Badge key={equipId} variant="secondary" className="text-xs">
-                                {getEquipmentName(equipId)}
+                            {issue.damagedEquipment.map((item) => (
+                              <Badge key={item.equipmentId} variant="secondary" className="text-xs">
+                                {getEquipmentDisplay(item, issue.building, issue.room)}
                               </Badge>
                             ))}
                           </div>
